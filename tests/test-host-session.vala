@@ -53,6 +53,11 @@ namespace Frida.HostSessionTest {
 			h.run ();
 		});
 
+		GLib.Test.add_func ("/HostSession/Fruity/Manual/enumerate-applications", () => {
+			var h = new Harness ((h) => Fruity.Manual.enumerate_applications.begin (h as Harness));
+			h.run ();
+		});
+
 		GLib.Test.add_func ("/HostSession/Droidy/backend", () => {
 			var h = new Harness ((h) => Droidy.backend.begin (h as Harness));
 			h.run ();
@@ -2581,6 +2586,25 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 			h.service.remove_backend (backend);
 
 			h.done ();
+		}
+
+		namespace Manual {
+
+			private static async void enumerate_applications (Harness h) {
+				var device_id = "<udid>";
+
+				var device_manager = new DeviceManager ();
+
+				try {
+					var device = yield device_manager.get_device_by_id (device_id + ":lockdown");
+					var apps = yield device.enumerate_applications ();
+					printerr ("got %d apps\n", apps.size ());
+				} catch (GLib.Error e) {
+					printerr ("\nFAIL: %s\n\n", e.message);
+					assert_not_reached ();
+				}
+			}
+
 		}
 
 		namespace PropertyList {

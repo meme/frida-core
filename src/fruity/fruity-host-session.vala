@@ -1,10 +1,15 @@
 namespace Frida {
 	public class FruityHostSessionBackend : Object, HostSessionBackend {
 		private Fruity.Client control_client;
-		private Gee.HashMap<uint, FruityHostSessionProvider> provider_by_device_id = new Gee.HashMap<uint, FruityHostSessionProvider> ();
+
+		private Gee.HashSet<uint> devices = new Gee.HashSet<uint> ();
+		private Gee.HashMap<uint, FruityRemoteProvider> remote_providers = new Gee.HashMap<uint, FruityRemoteProvider> ();
+		private Gee.HashMap<uint, FruityLockdownProvider> lockdown_providers = new Gee.HashMap<uint, FruityLockdownProvider> ();
+
 		private Gee.Promise<bool> start_request;
 		private StartedHandler started_handler;
 		private delegate void StartedHandler ();
+
 		private bool has_probed_protocol_version = false;
 		private uint protocol_version = 1;
 
@@ -29,22 +34,10 @@ namespace Frida {
 
 			control_client = yield create_client ();
 			control_client.device_attached.connect ((id, product_id, udid) => {
-				if (provider_by_device_id.has_key (id))
-					return;
-
-				var provider = new FruityHostSessionProvider (this, id, product_id, udid);
-				provider_by_device_id[id] = provider;
-				open_provider.begin (provider);
+				add_device.begin (id, product_id, udid);
 			});
 			control_client.device_detached.connect ((id) => {
-				if (!provider_by_device_id.has_key (id))
-					return;
-
-				FruityHostSessionProvider provider;
-				provider_by_device_id.unset (id, out provider);
-
-				if (provider.is_open)
-					provider_unavailable (provider);
+				remove_device (id);
 			});
 
 			try {
@@ -87,12 +80,19 @@ namespace Frida {
 				control_client = null;
 			}
 
-			foreach (var provider in provider_by_device_id.values) {
-				if (provider.is_open)
-					provider_unavailable (provider);
+			devices.clear ();
+
+			foreach (var provider in lockdown_providers.values) {
+				provider_unavailable (provider);
 				yield provider.close ();
 			}
-			provider_by_device_id.clear ();
+			lockdown_providers.clear ();
+
+			foreach (var provider in remote_providers.values) {
+				provider_unavailable (provider);
+				yield provider.close ();
+			}
+			remote_providers.clear ();
 		}
 
 		public async Fruity.Client create_client () {
@@ -124,37 +124,97 @@ namespace Frida {
 				return new Fruity.ClientV2 ();
 		}
 
-		private async void open_provider (FruityHostSessionProvider provider) {
-			try {
-				yield provider.open ();
+		private async void add_device (uint id, int product_id, string udid) {
+			if (devices.contains (id))
+				return;
+			devices.add (id);
 
-				provider_available (provider);
-			} catch (Error e) {
-				provider_by_device_id.unset (provider.device_id);
+			string? name = null;
+			ImageData? icon_data = null;
+
+			bool got_details = false;
+			for (int i = 1; !got_details && devices.contains (id); i++) {
+				try {
+					_extract_details_for_device (product_id, udid, out name, out icon_data);
+					got_details = true;
+				} catch (Error e) {
+					if (i != 20) {
+						var source = new TimeoutSource.seconds (1);
+						source.set_callback (() => {
+							add_device.callback ();
+							return false;
+						});
+						source.attach (MainContext.get_thread_default ());
+						yield;
+					} else {
+						break;
+					}
+				}
 			}
+			if (!devices.contains (id))
+				return;
+			if (!got_details) {
+				remove_device (id);
+				return;
+			}
+
+			var icon = Image.from_data (icon_data);
+
+			var remote_provider = new FruityRemoteProvider (this, name, icon, id, product_id, udid);
+			remote_providers[id] = remote_provider;
+
+			var lockdown_provider = new FruityLockdownProvider (this, name, icon, id, product_id, udid);
+			lockdown_providers[id] = lockdown_provider;
+
+			provider_available (remote_provider);
+			provider_available (lockdown_provider);
 		}
+
+		private void remove_device (uint id) {
+			if (!devices.contains (id))
+				return;
+			devices.remove (id);
+
+			FruityLockdownProvider lockdown_provider;
+			if (lockdown_providers.unset (id, out lockdown_provider))
+				lockdown_provider.close.begin ();
+
+			FruityRemoteProvider remote_provider;
+			if (remote_providers.unset (id, out remote_provider))
+				remote_provider.close.begin ();
+		}
+
+		public extern static void _extract_details_for_device (int product_id, string udid, out string name, out ImageData? icon) throws Error;
 	}
 
-	public class FruityHostSessionProvider : Object, HostSessionProvider {
+	public class FruityRemoteProvider : Object, HostSessionProvider {
 		public string id {
 			get { return device_udid; }
 		}
 
 		public string name {
-			get { return _name; }
+			get { return device_name; }
 		}
-		private string _name = "iOS Device";
 
 		public Image? icon {
-			get { return _icon; }
+			get { return device_icon; }
 		}
-		private Image? _icon = null;
 
 		public HostSessionProviderKind kind {
 			get { return HostSessionProviderKind.USB; }
 		}
 
 		public FruityHostSessionBackend backend {
+			get;
+			construct;
+		}
+
+		public string device_name {
+			get;
+			construct;
+		}
+
+		public Image? device_icon {
 			get;
 			construct;
 		}
@@ -174,52 +234,31 @@ namespace Frida {
 			construct;
 		}
 
-		public bool is_open {
-			get;
-			private set;
-		}
-
-		private Gee.ArrayList<Entry> entries = new Gee.ArrayList<Entry> ();
+		private Gee.HashSet<Entry> entries = new Gee.HashSet<Entry> ();
 
 		private const uint DEFAULT_SERVER_PORT = 27042;
 
-		public FruityHostSessionProvider (FruityHostSessionBackend backend, uint device_id, int device_product_id, string device_udid) {
-			Object (backend: backend, device_id: device_id, device_product_id: device_product_id, device_udid: device_udid);
-		}
-
-		public async void open () throws Error {
-			bool got_details = false;
-			for (int i = 1; !got_details; i++) {
-				try {
-					ImageData? icon_data;
-					_extract_details_for_device (device_product_id, device_udid, out _name, out icon_data);
-					_icon = Image.from_data (icon_data);
-					got_details = true;
-				} catch (Error e) {
-					if (i != 60) {
-						var source = new TimeoutSource.seconds (1);
-						source.set_callback (() => {
-							open.callback ();
-							return false;
-						});
-						source.attach (MainContext.get_thread_default ());
-						yield;
-					} else {
-						break;
-					}
-				}
-			}
-
-			if (!got_details)
-				throw new Error.TIMED_OUT ("Timed out while waiting for USB device to appear");
-
-			is_open = true;
+		public FruityRemoteProvider (FruityHostSessionBackend backend, string name, Image? icon, uint device_id, int device_product_id, string device_udid) {
+			Object (
+				backend: backend,
+				device_name: name,
+				device_icon: icon,
+				device_id: device_id,
+				device_product_id: device_product_id,
+				device_udid: device_udid
+			);
 		}
 
 		public async void close () {
-			foreach (var entry in entries)
+			while (!entries.is_empty) {
+				var iterator = entries.iterator ();
+				iterator.next ();
+				var entry = iterator.get ();
+
+				entries.remove (entry);
+
 				yield destroy_entry (entry, SessionDetachReason.APPLICATION_REQUESTED);
-			entries.clear ();
+			}
 		}
 
 		public async HostSession create (string? location = null) throws Error {
@@ -276,8 +315,6 @@ namespace Frida {
 			}
 			throw new Error.INVALID_ARGUMENT ("Invalid host session");
 		}
-
-		public extern static void _extract_details_for_device (int product_id, string udid, out string name, out ImageData? icon) throws Error;
 
 		private void on_connection_closed (DBusConnection connection, bool remote_peer_vanished, GLib.Error? error) {
 			bool closed_by_us = (!remote_peer_vanished && error == null);
@@ -369,6 +406,85 @@ namespace Frida {
 				agent_session_by_id.unset (id);
 				agent_session_closed (id, reason);
 			}
+		}
+	}
+
+	public class FruityLockdownProvider : Object, HostSessionProvider {
+		public string id {
+			get { return _id; }
+		}
+		private string _id;
+
+		public string name {
+			get { return device_name; }
+		}
+
+		public Image? icon {
+			get { return device_icon; }
+		}
+
+		public HostSessionProviderKind kind {
+			get { return HostSessionProviderKind.LOCAL_TETHER; }
+		}
+
+		public FruityHostSessionBackend backend {
+			get;
+			construct;
+		}
+
+		public string device_name {
+			get;
+			construct;
+		}
+
+		public Image? device_icon {
+			get;
+			construct;
+		}
+
+		public uint device_id {
+			get;
+			construct;
+		}
+
+		public int device_product_id {
+			get;
+			construct;
+		}
+
+		public string device_udid {
+			get;
+			construct;
+		}
+
+		public FruityLockdownProvider (FruityHostSessionBackend backend, string name, Image? icon, uint device_id, int device_product_id, string device_udid) {
+			Object (
+				backend: backend,
+				device_name: name,
+				device_icon: icon,
+				device_id: device_id,
+				device_product_id: device_product_id,
+				device_udid: device_udid
+			);
+		}
+
+		construct {
+			_id = device_udid + ":lockdown";
+		}
+
+		public async void close () {
+		}
+
+		public async HostSession create (string? location = null) throws Error {
+			throw new Error.NOT_SUPPORTED ("Not yet implemented");
+		}
+
+		public async void destroy (HostSession host_session) throws Error {
+			throw new Error.NOT_SUPPORTED ("Not yet implemented");
+		}
+
+		public async AgentSession obtain_agent_session (HostSession host_session, AgentSessionId agent_session_id) throws Error {
+			throw new Error.NOT_SUPPORTED ("Not yet implemented");
 		}
 	}
 }
