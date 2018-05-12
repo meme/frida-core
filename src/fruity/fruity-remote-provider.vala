@@ -45,13 +45,13 @@ namespace Frida {
 
 		private const uint DEFAULT_SERVER_PORT = 27042;
 
-		public FruityRemoteProvider (string name, Image? icon, uint device_id, int device_product_id, string device_udid) {
+		public FruityRemoteProvider (string name, Image? icon, uint id, int product_id, string udid) {
 			Object (
 				device_name: name,
 				device_icon: icon,
-				device_id: device_id,
-				device_product_id: device_product_id,
-				device_udid: device_udid
+				device_id: id,
+				device_product_id: product_id,
+				device_udid: udid
 			);
 		}
 
