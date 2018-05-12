@@ -10,9 +10,6 @@ namespace Frida {
 		private StartedHandler started_handler;
 		private delegate void StartedHandler ();
 
-		private bool has_probed_protocol_version = false;
-		private uint protocol_version = 1;
-
 		public async void start () {
 			started_handler = () => start.callback ();
 			var timeout_source = new TimeoutSource (100);
@@ -32,7 +29,7 @@ namespace Frida {
 
 			bool success = true;
 
-			control_client = yield create_client ();
+			control_client = new Fruity.Client ();
 			control_client.device_attached.connect ((id, product_id, udid) => {
 				add_device.begin (id, product_id, udid);
 			});
@@ -95,35 +92,6 @@ namespace Frida {
 			remote_providers.clear ();
 		}
 
-		public async Fruity.Client create_client () {
-			if (!has_probed_protocol_version) {
-				bool service_is_present = false;
-
-				var client = new Fruity.ClientV1 ();
-				try {
-					yield client.establish ();
-					service_is_present = true;
-				} catch (IOError establish_error) {
-				}
-
-				if (service_is_present) {
-					try {
-						yield client.enable_listen_mode ();
-						protocol_version = 1;
-					} catch (IOError listen_error) {
-						protocol_version = 2;
-					}
-
-					has_probed_protocol_version = true;
-				}
-			}
-
-			if (protocol_version == 1)
-				return new Fruity.ClientV1 ();
-			else
-				return new Fruity.ClientV2 ();
-		}
-
 		private async void add_device (uint id, int product_id, string udid) {
 			if (devices.contains (id))
 				return;
@@ -160,10 +128,10 @@ namespace Frida {
 
 			var icon = Image.from_data (icon_data);
 
-			var remote_provider = new FruityRemoteProvider (this, name, icon, id, product_id, udid);
+			var remote_provider = new FruityRemoteProvider (name, icon, id, product_id, udid);
 			remote_providers[id] = remote_provider;
 
-			var lockdown_provider = new FruityLockdownProvider (this, name, icon, id, product_id, udid);
+			var lockdown_provider = new FruityLockdownProvider (name, icon, id, product_id, udid);
 			lockdown_providers[id] = lockdown_provider;
 
 			provider_available (remote_provider);
@@ -204,11 +172,6 @@ namespace Frida {
 			get { return HostSessionProviderKind.USB; }
 		}
 
-		public FruityHostSessionBackend backend {
-			get;
-			construct;
-		}
-
 		public string device_name {
 			get;
 			construct;
@@ -238,9 +201,8 @@ namespace Frida {
 
 		private const uint DEFAULT_SERVER_PORT = 27042;
 
-		public FruityRemoteProvider (FruityHostSessionBackend backend, string name, Image? icon, uint device_id, int device_product_id, string device_udid) {
+		public FruityRemoteProvider (string name, Image? icon, uint device_id, int device_product_id, string device_udid) {
 			Object (
-				backend: backend,
 				device_name: name,
 				device_icon: icon,
 				device_id: device_id,
@@ -268,7 +230,7 @@ namespace Frida {
 					throw new Error.INVALID_ARGUMENT ("Invalid location: already created");
 			}
 
-			Fruity.Client client = yield backend.create_client ();
+			Fruity.Client client = new Fruity.Client ();
 			DBusConnection connection;
 			try {
 				yield client.establish ();
@@ -427,11 +389,6 @@ namespace Frida {
 			get { return HostSessionProviderKind.LOCAL_TETHER; }
 		}
 
-		public FruityHostSessionBackend backend {
-			get;
-			construct;
-		}
-
 		public string device_name {
 			get;
 			construct;
@@ -457,9 +414,8 @@ namespace Frida {
 			construct;
 		}
 
-		public FruityLockdownProvider (FruityHostSessionBackend backend, string name, Image? icon, uint device_id, int device_product_id, string device_udid) {
+		public FruityLockdownProvider (string name, Image? icon, uint device_id, int device_product_id, string device_udid) {
 			Object (
-				backend: backend,
 				device_name: name,
 				device_icon: icon,
 				device_id: device_id,

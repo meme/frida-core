@@ -1,137 +1,5 @@
 namespace Frida.Fruity {
-	public class ClientV1 : Client {
-		public override uint protocol_version {
-			get { return 0; }
-		}
-
-		public override async void enable_listen_mode () throws IOError {
-			assert (is_processing_messages);
-
-			var result = yield query (MessageType.LISTEN);
-			if (result != ResultCode.SUCCESS)
-				throw new IOError.FAILED ("Unexpected error while trying to enable listen mode: %d", result);
-		}
-
-		public override async void connect_to_port (uint device_id, uint port) throws IOError {
-			assert (is_processing_messages);
-
-			var connect_body = new uint8[8];
-
-			uint32 * p = (void *) connect_body;
-			p[0] = device_id.to_little_endian ();
-			p[1] = ((uint32) port << 16).to_big_endian ();
-
-			var result = yield query (MessageType.CONNECT, connect_body, true);
-			handle_connect_result (result);
-		}
-
-		protected override void dispatch_message (Client.Message msg) throws IOError {
-			int32 * body_i32 = (int32 *) msg.body;
-			uint32 * body_u32 = (uint32 *) msg.body;
-
-			switch (msg.type) {
-				case MessageType.RESULT:
-					if (msg.body_size != 4)
-						throw new IOError.FAILED ("Unexpected payload size for RESULT");
-					int result = body_i32[0];
-					handle_result_message (msg, result);
-					break;
-
-				case MessageType.DEVICE_ATTACHED:
-					if (msg.body_size < 4)
-						throw new IOError.FAILED ("Unexpected payload size for ATTACHED");
-
-					uint attached_id = body_u32[0];
-					unowned string udid = (string) (msg.body + 6);
-					device_attached (attached_id, -1, udid);
-					break;
-
-				case MessageType.DEVICE_DETACHED:
-					if (msg.body_size != 4)
-						throw new IOError.FAILED ("Unexpected payload size for DETACHED");
-					uint detached_id = body_u32[0];
-					device_detached (detached_id);
-					break;
-
-				default:
-					throw new IOError.FAILED ("Unexpected message type: %u", (uint) msg.type);
-			}
-		}
-	}
-
-	public class ClientV2 : Client {
-		public override uint protocol_version {
-			get { return 1; }
-		}
-
-		public override async void enable_listen_mode () throws IOError {
-			assert (is_processing_messages);
-
-			var result = yield query_with_plist (create_plist ("Listen"));
-			if (result != ResultCode.SUCCESS)
-				throw new IOError.FAILED ("Unexpected error while trying to enable listen mode: %d", result);
-		}
-
-		public override async void connect_to_port (uint device_id, uint port) throws IOError {
-			assert (is_processing_messages);
-
-			var plist = create_plist ("Connect");
-			plist.set_uint ("DeviceID", device_id);
-			plist.set_uint ("PortNumber", ((uint32) port << 16).to_big_endian ());
-
-			var result = yield query_with_plist (plist, true);
-			handle_connect_result (result);
-		}
-
-		protected override void dispatch_message (Client.Message msg) throws IOError {
-			if (msg.type != MessageType.PROPERTY_LIST)
-				throw new IOError.FAILED ("Unexpected message type %u, was expecting a property list", (uint) msg.type);
-			else if (msg.body_size == 0)
-				throw new IOError.FAILED ("Unexpected message with empty body");
-
-			unowned string xml = (string) msg.body;
-			var plist = new PropertyList.from_xml (xml);
-			var message_type = plist.get_string ("MessageType");
-			if (message_type == "Result") {
-				var result = plist.get_int ("Number");
-				handle_result_message (msg, result);
-			} else if (message_type == "Attached") {
-				var attached_id = (uint) plist.get_int ("DeviceID");
-				var props = plist.get_plist ("Properties");
-				var product_id = props.get_int ("ProductID");
-				var udid = props.get_string ("SerialNumber");
-				device_attached (attached_id, product_id, udid);
-			} else if (message_type == "Detached") {
-				var detached_id = (uint) plist.get_int ("DeviceID");
-				device_detached (detached_id);
-			} else {
-				throw new IOError.FAILED ("Unexpected message type: %s", message_type);
-			}
-		}
-
-		private PropertyList create_plist (string message_type) {
-			var plist = new PropertyList ();
-			plist.set_string ("BundleID", "com.apple.iTunes");
-			plist.set_string ("ClientVersionString", "usbmuxd-??? built for ???");
-			plist.set_string ("MessageType", message_type);
-			return plist;
-		}
-
-		protected async int query_with_plist (PropertyList plist, bool is_mode_switch_request = false) throws IOError {
-			var xml = plist.to_xml ();
-			var size = xml.length;
-			var body = new uint8[size];
-			Memory.copy (body, xml, size);
-			var result = yield query (MessageType.PROPERTY_LIST, body, is_mode_switch_request);
-			return result;
-		}
-	}
-
-	public abstract class Client : Object {
-		public abstract uint protocol_version {
-			get;
-		}
-
+	public class Client : Object {
 		public SocketConnection connection {
 			get;
 			private set;
@@ -141,12 +9,13 @@ namespace Frida.Fruity {
 		private OutputStream output;
 		private Cancellable output_cancellable = new Cancellable ();
 
-		protected bool is_processing_messages;
+		private bool is_processing_messages;
 		private uint last_tag;
 		private uint mode_switch_tag;
 		private Gee.ArrayList<PendingResponse> pending_responses;
 
 		private const uint16 USBMUX_SERVER_PORT = 27015;
+		private const uint USBMUX_PROTOCOL_VERSION = 1;
 		private const uint16 MAX_MESSAGE_SIZE = 2048;
 
 		public signal void device_attached (uint id, int product_id, string udid);
@@ -193,8 +62,24 @@ namespace Frida.Fruity {
 			}
 		}
 
-		public abstract async void enable_listen_mode () throws IOError;
-		public abstract async void connect_to_port (uint device_id, uint port) throws IOError;
+		public async void enable_listen_mode () throws IOError {
+			assert (is_processing_messages);
+
+			var result = yield query_with_plist (create_plist ("Listen"));
+			if (result != ResultCode.SUCCESS)
+				throw new IOError.FAILED ("Unexpected error while trying to enable listen mode: %d", result);
+		}
+
+		public async void connect_to_port (uint device_id, uint port) throws IOError {
+			assert (is_processing_messages);
+
+			var plist = create_plist ("Connect");
+			plist.set_uint ("DeviceID", device_id);
+			plist.set_uint ("PortNumber", ((uint32) port << 16).to_big_endian ());
+
+			var result = yield query_with_plist (plist, true);
+			handle_connect_result (result);
+		}
 
 		public async void close () throws IOError {
 			if (!is_processing_messages)
@@ -224,7 +109,7 @@ namespace Frida.Fruity {
 			output = null;
 		}
 
-		protected async int query (MessageType type, uint8[]? body = null, bool is_mode_switch_request = false) throws IOError {
+		private async int query (MessageType type, uint8[]? body = null, bool is_mode_switch_request = false) throws IOError {
 			uint32 tag = last_tag++;
 
 			if (is_mode_switch_request)
@@ -237,6 +122,23 @@ namespace Frida.Fruity {
 			yield;
 
 			return pending.result;
+		}
+
+		private async int query_with_plist (PropertyList plist, bool is_mode_switch_request = false) throws IOError {
+			var xml = plist.to_xml ();
+			var size = xml.length;
+			var body = new uint8[size];
+			Memory.copy (body, xml, size);
+			var result = yield query (MessageType.PROPERTY_LIST, body, is_mode_switch_request);
+			return result;
+		}
+
+		private PropertyList create_plist (string message_type) {
+			var plist = new PropertyList ();
+			plist.set_string ("BundleID", "com.apple.iTunes");
+			plist.set_string ("ClientVersionString", "usbmuxd-??? built for ???");
+			plist.set_string ("MessageType", message_type);
+			return plist;
 		}
 
 		private async void process_incoming_messages () {
@@ -252,9 +154,33 @@ namespace Frida.Fruity {
 			}
 		}
 
-		protected abstract void dispatch_message (Message msg) throws IOError;
+		private void dispatch_message (Client.Message msg) throws IOError {
+			if (msg.type != MessageType.PROPERTY_LIST)
+				throw new IOError.FAILED ("Unexpected message type %u, was expecting a property list", (uint) msg.type);
+			else if (msg.body_size == 0)
+				throw new IOError.FAILED ("Unexpected message with empty body");
 
-		protected void handle_result_message (Message msg, int result) throws IOError {
+			unowned string xml = (string) msg.body;
+			var plist = new PropertyList.from_xml (xml);
+			var message_type = plist.get_string ("MessageType");
+			if (message_type == "Result") {
+				var result = plist.get_int ("Number");
+				handle_result_message (msg, result);
+			} else if (message_type == "Attached") {
+				var attached_id = (uint) plist.get_int ("DeviceID");
+				var props = plist.get_plist ("Properties");
+				var product_id = props.get_int ("ProductID");
+				var udid = props.get_string ("SerialNumber");
+				device_attached (attached_id, product_id, udid);
+			} else if (message_type == "Detached") {
+				var detached_id = (uint) plist.get_int ("DeviceID");
+				device_detached (detached_id);
+			} else {
+				throw new IOError.FAILED ("Unexpected message type: %s", message_type);
+			}
+		}
+
+		private void handle_result_message (Message msg, int result) throws IOError {
 			PendingResponse match = null;
 			foreach (var pending in pending_responses) {
 				if (pending.tag == msg.tag) {
@@ -276,7 +202,7 @@ namespace Frida.Fruity {
 			}
 		}
 
-		protected void handle_connect_result (int result) throws IOError {
+		private void handle_connect_result (int result) throws IOError {
 			switch (result) {
 				case ResultCode.SUCCESS:
 					break;
@@ -366,7 +292,7 @@ namespace Frida.Fruity {
 
 			uint32 * p = (void *) blob;
 			p[0] = blob.length.to_little_endian ();
-			p[1] = protocol_version.to_little_endian ();
+			p[1] = USBMUX_PROTOCOL_VERSION.to_little_endian ();
 			p[2] = ((uint) type).to_little_endian ();
 			p[3] = tag.to_little_endian ();
 
