@@ -274,6 +274,8 @@ tcp_sources = [
 fruity_sources = [
   'fruity/fruity-client.vala',
   'fruity/fruity-host-session.vala',
+  'fruity/fruity-remote-provider.vala',
+  'fruity/fruity-lockdown-provider.vala',
   'fruity/fruity-property-list.vala',
 ]
 if host_os_family == 'windows'

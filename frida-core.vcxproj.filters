@@ -81,6 +81,12 @@
     <None Include="src\fruity\fruity-host-session.vala">
       <Filter>Source Files\fruity</Filter>
     </None>
+    <None Include="src\fruity\fruity-remote-provider.vala">
+      <Filter>Source Files\fruity</Filter>
+    </None>
+    <None Include="src\fruity\fruity-lockdown-provider.vala">
+      <Filter>Source Files\fruity</Filter>
+    </None>
     <None Include="src\windows\windows-host-session.vala">
       <Filter>Source Files\windows</Filter>
     </None>
@@ -123,6 +129,12 @@
       <Filter>Source Files\generated\droidy</Filter>
     </ClCompile>
     <ClCompile Include="$(IntDir)src\fruity\fruity-host-session.c">
+      <Filter>Source Files\generated\fruity</Filter>
+    </ClCompile>
+    <ClCompile Include="$(IntDir)src\fruity\fruity-remote-provider.c">
+      <Filter>Source Files\generated\fruity</Filter>
+    </ClCompile>
+    <ClCompile Include="$(IntDir)src\fruity\fruity-lockdown-provider.c">
       <Filter>Source Files\generated\fruity</Filter>
     </ClCompile>
     <ClCompile Include="$(IntDir)src\windows\windows-host-session.c">
