@@ -47,7 +47,7 @@ namespace Frida {
 			if (success) {
 				/* perform a dummy-request to flush out any pending device attach notifications */
 				try {
-					yield control_client.connect_to_port (uint.MAX, uint.MAX);
+					yield control_client.connect_to_port (Fruity.DeviceId (uint.MAX), uint.MAX);
 					assert_not_reached ();
 				} catch (IOError expected_error) {
 				}
@@ -92,18 +92,19 @@ namespace Frida {
 			remote_providers.clear ();
 		}
 
-		private async void add_device (uint id, int product_id, string udid) {
-			if (devices.contains (id))
+		private async void add_device (Fruity.DeviceId id, Fruity.ProductId product_id, Fruity.Udid udid) {
+			var raw_id = id.raw_value;
+			if (devices.contains (raw_id))
 				return;
-			devices.add (id);
+			devices.add (raw_id);
 
 			string? name = null;
 			ImageData? icon_data = null;
 
 			bool got_details = false;
-			for (int i = 1; !got_details && devices.contains (id); i++) {
+			for (int i = 1; !got_details && devices.contains (raw_id); i++) {
 				try {
-					_extract_details_for_device (product_id, udid, out name, out icon_data);
+					_extract_details_for_device (product_id.raw_value, udid.raw_value, out name, out icon_data);
 					got_details = true;
 				} catch (Error e) {
 					if (i != 20) {
@@ -119,7 +120,7 @@ namespace Frida {
 					}
 				}
 			}
-			if (!devices.contains (id))
+			if (!devices.contains (raw_id))
 				return;
 			if (!got_details) {
 				remove_device (id);
@@ -128,27 +129,28 @@ namespace Frida {
 
 			var icon = Image.from_data (icon_data);
 
-			var remote_provider = new FruityRemoteProvider (name, icon, id, product_id, udid);
-			remote_providers[id] = remote_provider;
+			var remote_provider = new FruityRemoteProvider (name, icon, id, udid);
+			remote_providers[raw_id] = remote_provider;
 
-			var lockdown_provider = new FruityLockdownProvider (name, icon, id, product_id, udid);
-			lockdown_providers[id] = lockdown_provider;
+			var lockdown_provider = new FruityLockdownProvider (name, icon, id, udid);
+			lockdown_providers[raw_id] = lockdown_provider;
 
 			provider_available (remote_provider);
 			provider_available (lockdown_provider);
 		}
 
-		private void remove_device (uint id) {
-			if (!devices.contains (id))
+		private void remove_device (Fruity.DeviceId id) {
+			var raw_id = id.raw_value;
+			if (!devices.contains (raw_id))
 				return;
-			devices.remove (id);
+			devices.remove (raw_id);
 
 			FruityLockdownProvider lockdown_provider;
-			if (lockdown_providers.unset (id, out lockdown_provider))
+			if (lockdown_providers.unset (raw_id, out lockdown_provider))
 				lockdown_provider.close.begin ();
 
 			FruityRemoteProvider remote_provider;
-			if (remote_providers.unset (id, out remote_provider))
+			if (remote_providers.unset (raw_id, out remote_provider))
 				remote_provider.close.begin ();
 		}
 

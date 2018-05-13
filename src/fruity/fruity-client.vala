@@ -18,8 +18,8 @@ namespace Frida.Fruity {
 		private const uint USBMUX_PROTOCOL_VERSION = 1;
 		private const uint16 MAX_MESSAGE_SIZE = 2048;
 
-		public signal void device_attached (uint id, int product_id, string udid);
-		public signal void device_detached (uint id);
+		public signal void device_attached (DeviceId id, ProductId product_id, Udid udid);
+		public signal void device_detached (DeviceId id);
 
 		construct {
 			reset ();
@@ -70,11 +70,11 @@ namespace Frida.Fruity {
 				throw new IOError.FAILED ("Unexpected error while trying to enable listen mode: %d", result);
 		}
 
-		public async void connect_to_port (uint device_id, uint port) throws IOError {
+		public async void connect_to_port (DeviceId device_id, uint port) throws IOError {
 			assert (is_processing_messages);
 
 			var plist = create_plist ("Connect");
-			plist.set_uint ("DeviceID", device_id);
+			plist.set_uint ("DeviceID", device_id.raw_value);
 			plist.set_uint ("PortNumber", ((uint32) port << 16).to_big_endian ());
 
 			var result = yield query_with_plist (plist, true);
@@ -167,13 +167,13 @@ namespace Frida.Fruity {
 				var result = plist.get_int ("Number");
 				handle_result_message (msg, result);
 			} else if (message_type == "Attached") {
-				var attached_id = (uint) plist.get_int ("DeviceID");
+				var attached_id = DeviceId ((uint) plist.get_int ("DeviceID"));
 				var props = plist.get_plist ("Properties");
-				var product_id = props.get_int ("ProductID");
-				var udid = props.get_string ("SerialNumber");
+				var product_id = ProductId (props.get_int ("ProductID"));
+				var udid = Udid (props.get_string ("SerialNumber"));
 				device_attached (attached_id, product_id, udid);
 			} else if (message_type == "Detached") {
-				var detached_id = (uint) plist.get_int ("DeviceID");
+				var detached_id = DeviceId ((uint) plist.get_int ("DeviceID"));
 				device_detached (detached_id);
 			} else {
 				throw new IOError.FAILED ("Unexpected message type: %s", message_type);
@@ -341,6 +341,39 @@ namespace Frida.Fruity {
 				this.result = result;
 				handler ();
 			}
+		}
+	}
+
+	public struct DeviceId {
+		public uint raw_value {
+			get;
+			private set;
+		}
+
+		public DeviceId (uint raw_value) {
+			this.raw_value = raw_value;
+		}
+	}
+
+	public struct ProductId {
+		public int raw_value {
+			get;
+			private set;
+		}
+
+		public ProductId (int raw_value) {
+			this.raw_value = raw_value;
+		}
+	}
+
+	public struct Udid {
+		public string raw_value {
+			get;
+			private set;
+		}
+
+		public Udid (string raw_value) {
+			this.raw_value = raw_value;
 		}
 	}
 

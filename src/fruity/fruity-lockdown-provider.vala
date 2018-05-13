@@ -27,33 +27,27 @@ namespace Frida {
 			construct;
 		}
 
-		public uint device_id {
+		public Fruity.DeviceId device_id {
 			get;
 			construct;
 		}
 
-		public int device_product_id {
+		public Fruity.Udid device_udid {
 			get;
 			construct;
 		}
 
-		public string device_udid {
-			get;
-			construct;
-		}
-
-		public FruityLockdownProvider (string name, Image? icon, uint id, int product_id, string udid) {
+		public FruityLockdownProvider (string name, Image? icon, Fruity.DeviceId id, Fruity.Udid udid) {
 			Object (
 				device_name: name,
 				device_icon: icon,
 				device_id: id,
-				device_product_id: product_id,
 				device_udid: udid
 			);
 		}
 
 		construct {
-			_id = device_udid + ":lockdown";
+			_id = device_udid.raw_value + ":lockdown";
 		}
 
 		public async void close () {

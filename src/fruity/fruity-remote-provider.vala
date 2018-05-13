@@ -1,7 +1,7 @@
 namespace Frida {
 	public class FruityRemoteProvider : Object, HostSessionProvider {
 		public string id {
-			get { return device_udid; }
+			get { return device_udid.raw_value; }
 		}
 
 		public string name {
@@ -26,17 +26,12 @@ namespace Frida {
 			construct;
 		}
 
-		public uint device_id {
+		public Fruity.DeviceId device_id {
 			get;
 			construct;
 		}
 
-		public int device_product_id {
-			get;
-			construct;
-		}
-
-		public string device_udid {
+		public Fruity.Udid device_udid {
 			get;
 			construct;
 		}
@@ -45,12 +40,11 @@ namespace Frida {
 
 		private const uint DEFAULT_SERVER_PORT = 27042;
 
-		public FruityRemoteProvider (string name, Image? icon, uint id, int product_id, string udid) {
+		public FruityRemoteProvider (string name, Image? icon, Fruity.DeviceId id, Fruity.Udid udid) {
 			Object (
 				device_name: name,
 				device_icon: icon,
 				device_id: id,
-				device_product_id: product_id,
 				device_udid: udid
 			);
 		}
