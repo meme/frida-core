@@ -1,5 +1,5 @@
 namespace Frida.Fruity {
-	public class Client : Object {
+	public class UsbMuxClient : Object {
 		public SocketConnection connection {
 			get;
 			private set;
@@ -81,9 +81,9 @@ namespace Frida.Fruity {
 			handle_connect_result (result);
 		}
 
-		public async void close () throws IOError {
+		public async void close () {
 			if (!is_processing_messages)
-				throw new IOError.FAILED ("Client is already closed");
+				return;
 			is_processing_messages = false;
 
 			input_cancellable.cancel ();
@@ -154,7 +154,7 @@ namespace Frida.Fruity {
 			}
 		}
 
-		private void dispatch_message (Client.Message msg) throws IOError {
+		private void dispatch_message (UsbMuxClient.Message msg) throws IOError {
 			if (msg.type != MessageType.PROPERTY_LIST)
 				throw new IOError.FAILED ("Unexpected message type %u, was expecting a property list", (uint) msg.type);
 			else if (msg.body_size == 0)

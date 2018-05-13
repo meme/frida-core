@@ -55,6 +55,7 @@ namespace Frida {
 
 		public async HostSession create (string? location = null) throws Error {
 			var session = yield LockdownSession.open (device_id);
+			yield session.close ();
 
 			throw new Error.NOT_SUPPORTED ("Not yet fully implemented");
 		}
@@ -74,7 +75,7 @@ namespace Frida {
 			construct;
 		}
 
-		private Fruity.Client client = new Fruity.Client ();
+		private Fruity.UsbMuxClient transport = new Fruity.UsbMuxClient ();
 
 		private const uint LOCKDOWN_PORT = 62078;
 
@@ -88,10 +89,17 @@ namespace Frida {
 			return session;
 		}
 
+		public async void close () {
+			if (transport != null) {
+				yield transport.close ();
+				transport = null;
+			}
+		}
+
 		private async void establish () throws Error {
 			try {
-				yield client.establish ();
-				yield client.connect_to_port (device_id, LOCKDOWN_PORT);
+				yield transport.establish ();
+				yield transport.connect_to_port (device_id, LOCKDOWN_PORT);
 			} catch (GLib.Error e) {
 				throw new Error.NOT_SUPPORTED (e.message);
 			}
