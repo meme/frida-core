@@ -54,7 +54,9 @@ namespace Frida {
 		}
 
 		public async HostSession create (string? location = null) throws Error {
-			throw new Error.NOT_SUPPORTED ("Not yet implemented");
+			var session = yield LockdownSession.open (device_id);
+
+			throw new Error.NOT_SUPPORTED ("Not yet fully implemented");
 		}
 
 		public async void destroy (HostSession host_session) throws Error {
@@ -63,6 +65,38 @@ namespace Frida {
 
 		public async AgentSession obtain_agent_session (HostSession host_session, AgentSessionId agent_session_id) throws Error {
 			throw new Error.NOT_SUPPORTED ("Not yet implemented");
+		}
+	}
+
+	private class LockdownSession : Object {
+		public Fruity.DeviceId device_id {
+			get;
+			construct;
+		}
+
+		private Fruity.Client client = new Fruity.Client ();
+
+		private const uint LOCKDOWN_PORT = 62078;
+
+		private LockdownSession (Fruity.DeviceId device_id) {
+			Object (device_id: device_id);
+		}
+
+		public static async LockdownSession open (Fruity.DeviceId device_id) throws Error {
+			var session = new LockdownSession (device_id);
+			yield session.establish ();
+			return session;
+		}
+
+		private async void establish () throws Error {
+			try {
+				yield client.establish ();
+				yield client.connect_to_port (device_id, LOCKDOWN_PORT);
+			} catch (GLib.Error e) {
+				throw new Error.NOT_SUPPORTED (e.message);
+			}
+
+			printerr ("CONNECTED!\n");
 		}
 	}
 }
