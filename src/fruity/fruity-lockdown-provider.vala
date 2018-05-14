@@ -54,7 +54,7 @@ namespace Frida {
 		}
 
 		public async HostSession create (string? location = null) throws Error {
-			var session = yield LockdownSession.open (device_id);
+			var session = yield LockdownSession.open (device_id, device_udid);
 			yield session.close ();
 
 			throw new Error.NOT_SUPPORTED ("Not yet fully implemented");
@@ -75,16 +75,24 @@ namespace Frida {
 			construct;
 		}
 
+		public Fruity.Udid device_udid {
+			get;
+			construct;
+		}
+
 		private Fruity.UsbMuxClient transport = new Fruity.UsbMuxClient ();
 
 		private const uint LOCKDOWN_PORT = 62078;
 
-		private LockdownSession (Fruity.DeviceId device_id) {
-			Object (device_id: device_id);
+		private LockdownSession (Fruity.DeviceId device_id, Fruity.Udid device_udid) {
+			Object (
+				device_id: device_id,
+				device_udid: device_udid
+			);
 		}
 
-		public static async LockdownSession open (Fruity.DeviceId device_id) throws Error {
-			var session = new LockdownSession (device_id);
+		public static async LockdownSession open (Fruity.DeviceId device_id, Fruity.Udid device_udid) throws Error {
+			var session = new LockdownSession (device_id, device_udid);
 			yield session.establish ();
 			return session;
 		}
@@ -99,6 +107,12 @@ namespace Frida {
 		private async void establish () throws Error {
 			try {
 				yield transport.establish ();
+
+				printerr ("asking for pair record for '%s'!\n", device_udid.raw_value);
+				var record = yield transport.read_pair_record (device_udid);
+				var host_private_key = record.get_bytes ("HostPrivateKey");
+				printerr ("got record! host_private_key.length=%d\n", host_private_key.length);
+
 				yield transport.connect_to_port (device_id, LOCKDOWN_PORT);
 			} catch (GLib.Error e) {
 				throw new Error.NOT_SUPPORTED (e.message);
