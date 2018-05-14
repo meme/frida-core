@@ -129,9 +129,7 @@ namespace Frida {
 			try {
 				yield transport.establish ();
 
-				var record = yield transport.read_pair_record (device_details.udid);
-				var host_private_key = record.get_bytes ("HostPrivateKey");
-				printerr ("got record! host_private_key.length=%d\n", host_private_key.length);
+				var pair_record = yield transport.read_pair_record (device_details.udid);
 
 				yield transport.connect_to_port (device_details.id, LOCKDOWN_PORT);
 
@@ -146,7 +144,7 @@ namespace Frida {
 				var type = yield query_type ();
 				printerr ("query_type() => %s\n", type);
 
-				yield start_session ();
+				yield start_session (pair_record);
 			} catch (GLib.Error e) {
 				throw new Error.NOT_SUPPORTED (e.message);
 			}
@@ -162,12 +160,12 @@ namespace Frida {
 			return response.get_string ("Type");
 		}
 
-		private async void start_session () throws IOError {
+		private async void start_session (PropertyList pair_record) throws IOError {
 			assert (is_processing_messages);
 
 			var request = create_request ("StartSession");
-			// TODO: HostID
-			// TODO: SystemBUID
+			request.set_string ("HostID", pair_record.get_string ("HostID"));
+			request.set_string ("SystemBUID", pair_record.get_string ("SystemBUID"));
 			var response = yield query (request);
 			if (response.has_key ("Error")) {
 				throw new IOError.FAILED ("Unexpected StartSession response: %s", response.get_string ("Error"));
