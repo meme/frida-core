@@ -97,6 +97,20 @@ namespace Frida.Fruity {
 			}
 		}
 
+		public async PropertyList read_pair_record (Udid udid) throws IOError {
+			var request = create_request ("ReadPairRecord");
+			request.set_string ("PairRecordID", udid.raw_value);
+
+			var response = yield query (request);
+
+			var raw_record = response.get_bytes ("PairRecordData");
+			unowned string record_xml_unterminated = (string) raw_record.get_data ();
+			string record_xml = record_xml_unterminated[0:raw_record.length];
+			var record = new PropertyList.from_xml (record_xml);
+
+			return record;
+		}
+
 		public async void close () {
 			if (!is_processing_messages)
 				return;
