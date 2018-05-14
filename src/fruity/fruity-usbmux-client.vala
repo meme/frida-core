@@ -93,7 +93,7 @@ namespace Frida.Fruity {
 
 			var response = yield query (create_request ("Listen"));
 			if (response.get_string ("MessageType") != "Result")
-				throw new IOError.FAILED ("Unexpected listen mode response");
+				throw new IOError.FAILED ("Unexpected Listen response");
 
 			var result = response.get_int ("Number");
 			if (result != ResultCode.SUCCESS)
@@ -109,7 +109,7 @@ namespace Frida.Fruity {
 
 			var response = yield query (request, true);
 			if (response.get_string ("MessageType") != "Result")
-				throw new IOError.FAILED ("Unexpected connect response");
+				throw new IOError.FAILED ("Unexpected Connect response");
 
 			var result = response.get_int ("Number");
 			switch (result) {
@@ -129,6 +129,13 @@ namespace Frida.Fruity {
 			request.set_string ("PairRecordID", udid.raw_value);
 
 			var response = yield query (request);
+			if (response.has_key ("MessageType")) {
+				if (response.get_string ("MessageType") != "Result")
+					throw new IOError.FAILED ("Unexpected ReadPairRecord response");
+				var result = response.get_int ("Number");
+				if (result != 0)
+					throw new IOError.FAILED ("Unexpected result while trying to read pair record: %d", result);
+			}
 
 			var raw_record = response.get_bytes ("PairRecordData");
 			unowned string record_xml_unterminated = (string) raw_record.get_data ();

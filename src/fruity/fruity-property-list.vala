@@ -22,6 +22,10 @@ namespace Frida.Fruity {
 			return value_by_key.keys.to_array ();
 		}
 
+		public bool has_key (string key) {
+			return value_by_key.has_key (key);
+		}
+
 		public string get_string (string key) throws IOError {
 			return get_value (key, typeof (string)).get_string ();
 		}
