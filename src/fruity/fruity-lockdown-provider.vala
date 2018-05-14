@@ -166,10 +166,10 @@ namespace Frida {
 			var request = create_request ("StartSession");
 			request.set_string ("HostID", pair_record.get_string ("HostID"));
 			request.set_string ("SystemBUID", pair_record.get_string ("SystemBUID"));
+
 			var response = yield query (request);
-			if (response.has_key ("Error")) {
+			if (response.has_key ("Error"))
 				throw new IOError.FAILED ("Unexpected StartSession response: %s", response.get_string ("Error"));
-			}
 
 			printerr ("response: %s\n", response.to_xml ());
 		}
