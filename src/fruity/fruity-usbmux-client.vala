@@ -17,7 +17,7 @@ namespace Frida.Fruity {
 		private const uint16 USBMUX_SERVER_PORT = 27015;
 		private const uint USBMUX_PROTOCOL_VERSION = 1;
 
-		public signal void device_attached (DeviceId id, ProductId product_id, Udid udid);
+		public signal void device_attached (DeviceDetails details);
 		public signal void device_detached (DeviceId id);
 
 		construct {
@@ -197,14 +197,15 @@ namespace Frida.Fruity {
 			} else {
 				var message_type = body.get_string ("MessageType");
 				if (message_type == "Attached") {
-					var attached_id = DeviceId ((uint) body.get_int ("DeviceID"));
 					var props = body.get_plist ("Properties");
-					var product_id = ProductId (props.get_int ("ProductID"));
-					var udid = Udid (props.get_string ("SerialNumber"));
-					device_attached (attached_id, product_id, udid);
+					var details = new DeviceDetails (
+						DeviceId ((uint) body.get_int ("DeviceID")),
+						ProductId (props.get_int ("ProductID")),
+						Udid (props.get_string ("SerialNumber"))
+					);
+					device_attached (details);
 				} else if (message_type == "Detached") {
-					var detached_id = DeviceId ((uint) body.get_int ("DeviceID"));
-					device_detached (detached_id);
+					device_detached (DeviceId ((uint) body.get_int ("DeviceID")));
 				} else {
 					throw new IOError.FAILED ("Unexpected message type: %s", message_type);
 				}
@@ -360,6 +361,27 @@ namespace Frida.Fruity {
 				this.response = response;
 				handler ();
 			}
+		}
+	}
+
+	public class DeviceDetails : Object {
+		public DeviceId id {
+			get;
+			construct;
+		}
+
+		public ProductId product_id {
+			get;
+			construct;
+		}
+
+		public Udid udid {
+			get;
+			construct;
+		}
+
+		public DeviceDetails (DeviceId id, ProductId product_id, Udid udid) {
+			Object (id: id, product_id: product_id, udid: udid);
 		}
 	}
 

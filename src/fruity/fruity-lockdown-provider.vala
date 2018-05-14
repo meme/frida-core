@@ -27,34 +27,28 @@ namespace Frida {
 			construct;
 		}
 
-		public Fruity.DeviceId device_id {
+		public Fruity.DeviceDetails device_details {
 			get;
 			construct;
 		}
 
-		public Fruity.Udid device_udid {
-			get;
-			construct;
-		}
-
-		public FruityLockdownProvider (string name, Image? icon, Fruity.DeviceId id, Fruity.Udid udid) {
+		public FruityLockdownProvider (string name, Image? icon, Fruity.DeviceDetails details) {
 			Object (
 				device_name: name,
 				device_icon: icon,
-				device_id: id,
-				device_udid: udid
+				device_details: details
 			);
 		}
 
 		construct {
-			_id = device_udid.raw_value + ":lockdown";
+			_id = device_details.udid.raw_value + ":lockdown";
 		}
 
 		public async void close () {
 		}
 
 		public async HostSession create (string? location = null) throws Error {
-			var session = yield LockdownSession.open (device_id, device_udid);
+			var session = yield LockdownSession.open (device_details);
 			yield session.close ();
 
 			throw new Error.NOT_SUPPORTED ("Not yet fully implemented");
@@ -70,12 +64,7 @@ namespace Frida {
 	}
 
 	private class LockdownSession : Object {
-		public Fruity.DeviceId device_id {
-			get;
-			construct;
-		}
-
-		public Fruity.Udid device_udid {
+		public Fruity.DeviceDetails device_details {
 			get;
 			construct;
 		}
@@ -84,15 +73,12 @@ namespace Frida {
 
 		private const uint LOCKDOWN_PORT = 62078;
 
-		private LockdownSession (Fruity.DeviceId device_id, Fruity.Udid device_udid) {
-			Object (
-				device_id: device_id,
-				device_udid: device_udid
-			);
+		private LockdownSession (Fruity.DeviceDetails device_details) {
+			Object (device_details: device_details);
 		}
 
-		public static async LockdownSession open (Fruity.DeviceId device_id, Fruity.Udid device_udid) throws Error {
-			var session = new LockdownSession (device_id, device_udid);
+		public static async LockdownSession open (Fruity.DeviceDetails device_details) throws Error {
+			var session = new LockdownSession (device_details);
 			yield session.establish ();
 			return session;
 		}
@@ -108,12 +94,11 @@ namespace Frida {
 			try {
 				yield transport.establish ();
 
-				printerr ("asking for pair record for '%s'!\n", device_udid.raw_value);
-				var record = yield transport.read_pair_record (device_udid);
+				var record = yield transport.read_pair_record (device_details.udid);
 				var host_private_key = record.get_bytes ("HostPrivateKey");
 				printerr ("got record! host_private_key.length=%d\n", host_private_key.length);
 
-				yield transport.connect_to_port (device_id, LOCKDOWN_PORT);
+				yield transport.connect_to_port (device_details.id, LOCKDOWN_PORT);
 			} catch (GLib.Error e) {
 				throw new Error.NOT_SUPPORTED (e.message);
 			}

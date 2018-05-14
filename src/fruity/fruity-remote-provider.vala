@@ -1,7 +1,7 @@
 namespace Frida {
 	public class FruityRemoteProvider : Object, HostSessionProvider {
 		public string id {
-			get { return device_udid.raw_value; }
+			get { return device_details.udid.raw_value; }
 		}
 
 		public string name {
@@ -26,12 +26,7 @@ namespace Frida {
 			construct;
 		}
 
-		public Fruity.DeviceId device_id {
-			get;
-			construct;
-		}
-
-		public Fruity.Udid device_udid {
+		public Fruity.DeviceDetails device_details {
 			get;
 			construct;
 		}
@@ -40,12 +35,11 @@ namespace Frida {
 
 		private const uint DEFAULT_SERVER_PORT = 27042;
 
-		public FruityRemoteProvider (string name, Image? icon, Fruity.DeviceId id, Fruity.Udid udid) {
+		public FruityRemoteProvider (string name, Image? icon, Fruity.DeviceDetails details) {
 			Object (
 				device_name: name,
 				device_icon: icon,
-				device_id: id,
-				device_udid: udid
+				device_details: details
 			);
 		}
 
@@ -72,7 +66,7 @@ namespace Frida {
 			DBusConnection connection;
 			try {
 				yield client.establish ();
-				yield client.connect_to_port (device_id, port);
+				yield client.connect_to_port (device_details.id, port);
 				connection = yield new DBusConnection (client.connection, null, DBusConnectionFlags.AUTHENTICATION_CLIENT);
 			} catch (GLib.Error e) {
 				if (e is IOError.CONNECTION_REFUSED)

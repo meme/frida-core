@@ -30,8 +30,8 @@ namespace Frida {
 			bool success = true;
 
 			control_client = new Fruity.UsbmuxClient ();
-			control_client.device_attached.connect ((id, product_id, udid) => {
-				add_device.begin (id, product_id, udid);
+			control_client.device_attached.connect ((details) => {
+				add_device.begin (details);
 			});
 			control_client.device_detached.connect ((id) => {
 				remove_device (id);
@@ -89,7 +89,8 @@ namespace Frida {
 			remote_providers.clear ();
 		}
 
-		private async void add_device (Fruity.DeviceId id, Fruity.ProductId product_id, Fruity.Udid udid) {
+		private async void add_device (Fruity.DeviceDetails details) {
+			var id = details.id;
 			var raw_id = id.raw_value;
 			if (devices.contains (raw_id))
 				return;
@@ -101,7 +102,7 @@ namespace Frida {
 			bool got_details = false;
 			for (int i = 1; !got_details && devices.contains (raw_id); i++) {
 				try {
-					_extract_details_for_device (product_id.raw_value, udid.raw_value, out name, out icon_data);
+					_extract_details_for_device (details.product_id.raw_value, details.udid.raw_value, out name, out icon_data);
 					got_details = true;
 				} catch (Error e) {
 					if (i != 20) {
@@ -126,10 +127,10 @@ namespace Frida {
 
 			var icon = Image.from_data (icon_data);
 
-			var remote_provider = new FruityRemoteProvider (name, icon, id, udid);
+			var remote_provider = new FruityRemoteProvider (name, icon, details);
 			remote_providers[raw_id] = remote_provider;
 
-			var lockdown_provider = new FruityLockdownProvider (name, icon, id, udid);
+			var lockdown_provider = new FruityLockdownProvider (name, icon, details);
 			lockdown_providers[raw_id] = lockdown_provider;
 
 			provider_available (remote_provider);
