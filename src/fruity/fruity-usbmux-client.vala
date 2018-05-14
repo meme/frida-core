@@ -5,9 +5,8 @@ namespace Frida.Fruity {
 			private set;
 		}
 		private InputStream input;
-		private Cancellable input_cancellable = new Cancellable ();
 		private OutputStream output;
-		private Cancellable output_cancellable = new Cancellable ();
+		private Cancellable cancellable = new Cancellable ();
 
 		private bool is_processing_messages;
 		private uint last_tag;
@@ -16,6 +15,7 @@ namespace Frida.Fruity {
 
 		private const uint16 USBMUX_SERVER_PORT = 27015;
 		private const uint USBMUX_PROTOCOL_VERSION = 1;
+		private const uint32 MAX_MESSAGE_SIZE = 128 * 1024;
 
 		public signal void device_attached (DeviceDetails details);
 		public signal void device_detached (DeviceId id);
@@ -33,6 +33,33 @@ namespace Frida.Fruity {
 			last_tag = 1;
 			mode_switch_tag = 0;
 			pending_responses = new Gee.ArrayList<PendingResponse> ();
+		}
+
+		public async void close () {
+			if (!is_processing_messages)
+				return;
+			is_processing_messages = false;
+
+			cancellable.cancel ();
+
+			var source = new IdleSource ();
+			source.set_priority (Priority.LOW);
+			source.set_callback (() => {
+				close.callback ();
+				return false;
+			});
+			source.attach (MainContext.get_thread_default ());
+			yield;
+
+			try {
+				var conn = this.connection;
+				if (conn != null)
+					yield conn.close_async (Priority.DEFAULT);
+			} catch (GLib.Error e) {
+			}
+			connection = null;
+			input = null;
+			output = null;
 		}
 
 		public async void establish () throws IOError {
@@ -111,42 +138,14 @@ namespace Frida.Fruity {
 			return record;
 		}
 
-		public async void close () {
-			if (!is_processing_messages)
-				return;
-			is_processing_messages = false;
-
-			input_cancellable.cancel ();
-			output_cancellable.cancel ();
-
-			var source = new IdleSource ();
-			source.set_priority (Priority.LOW);
-			source.set_callback (() => {
-				close.callback ();
-				return false;
-			});
-			source.attach (MainContext.get_thread_default ());
-			yield;
-
-			try {
-				var conn = this.connection;
-				if (conn != null)
-					yield conn.close_async (Priority.DEFAULT);
-			} catch (GLib.Error e) {
-			}
-			connection = null;
-			input = null;
-			output = null;
-		}
-
 		private async PropertyList query (PropertyList request, bool is_mode_switch_request = false) throws IOError {
 			uint32 tag = last_tag++;
 
 			if (is_mode_switch_request)
 				mode_switch_tag = tag;
 
-			var xml = request.to_xml ();
-			unowned uint8[] body = ((uint8[]) xml)[0:xml.length];
+			var body_xml = request.to_xml ();
+			unowned uint8[] body = ((uint8[]) body_xml)[0:body_xml.length];
 
 			var msg = create_message (MessageType.PROPERTY_LIST, tag, body);
 			var pending = new PendingResponse (tag, () => query.callback ());
@@ -156,7 +155,7 @@ namespace Frida.Fruity {
 
 			var response = pending.response;
 			if (response == null)
-				throw new IOError.CLOSED ("Connection closed");
+				throw new IOError.CONNECTION_CLOSED ("Connection closed");
 
 			return response;
 		}
@@ -175,7 +174,7 @@ namespace Frida.Fruity {
 				try {
 					var msg = yield read_message ();
 					dispatch_message (msg);
-				} catch (IOError e) {
+				} catch (GLib.Error e) {
 					foreach (var pending_response in pending_responses)
 						pending_response.complete (null);
 					reset ();
@@ -235,72 +234,38 @@ namespace Frida.Fruity {
 			}
 		}
 
-		private async Message read_message () throws IOError {
-			uint32 size = 0;
-			yield read (&size, 4);
-			size = uint.from_little_endian (size);
-			if (size < 16)
+		private async Message read_message () throws GLib.Error {
+			size_t bytes_read;
+
+			var header_buf = new uint8[16];
+			yield input.read_all_async (header_buf, Priority.DEFAULT, cancellable, out bytes_read);
+			if (bytes_read == 0)
+				throw new IOError.CONNECTION_CLOSED ("Connection closed");
+			var header = (uint32 *) header_buf;
+
+			uint32 size = uint32.from_little_endian (header[0]);
+			MessageType type = (MessageType) uint32.from_little_endian (header[2]);
+			uint32 tag = uint32.from_little_endian (header[3]);
+
+			if (size < 16 || size > MAX_MESSAGE_SIZE)
 				throw new IOError.FAILED ("Invalid message size");
 
-			uint32 protocol_version;
-			yield read (&protocol_version, 4);
+			var body_size = size - 16;
+			var msg = new Message (type, tag, body_size);
 
-			var msg = new Message ();
-			msg.size = size - 8;
-			msg.data = malloc (msg.size + 1);
-			msg.data[msg.size] = 0;
-			msg.body = msg.data + 8;
-			msg.body_size = msg.size - 8;
-			yield read (msg.data, msg.size);
-
-			uint32 * header = (void *) msg.data;
-			msg.type = (MessageType) uint.from_little_endian (header[0]);
-			msg.tag = uint.from_little_endian (header[1]);
+			if (body_size > 0) {
+				unowned uint8[] body_buf = ((uint8 []) msg.body)[0:body_size];
+				yield input.read_all_async (body_buf, Priority.DEFAULT, cancellable, out bytes_read);
+				if (bytes_read == 0)
+					throw new IOError.CONNECTION_CLOSED ("Connection closed");
+			}
 
 			return msg;
 		}
 
-		private async void write_message (uint8[] blob) throws IOError {
-			yield write (blob);
-		}
-
-		private async void read (void * buffer, size_t count) throws IOError {
-			try {
-				uint8 * dst = buffer;
-				size_t remaining = count;
-				while (remaining != 0) {
-					uint8[] slice = new uint8[remaining];
-					ssize_t len = yield input.read_async (slice, Priority.DEFAULT, input_cancellable);
-					if (len == 0)
-						throw new IOError.CLOSED ("Socket is closed");
-					Memory.copy (dst, slice, len);
-
-					dst += len;
-					remaining -= len;
-				}
-			} catch (GLib.Error e) {
-				throw new IOError.FAILED (e.message);
-			}
-		}
-
-		private async void write (uint8[] buffer) throws IOError {
-			try {
-				size_t remaining = buffer.length;
-
-				ssize_t len = yield output.write_async (buffer);
-				remaining -= len;
-
-				size_t offset = 0;
-				while (remaining != 0) {
-					unowned uint8[] slice = buffer[offset:buffer.length];
-					len = yield output.write_async (slice, Priority.DEFAULT, output_cancellable);
-
-					offset += len;
-					remaining -= len;
-				}
-			} catch (GLib.Error e) {
-				throw new IOError.FAILED (e.message);
-			}
+		private async void write_message (uint8[] blob) throws GLib.Error {
+			size_t bytes_written;
+			yield output.write_all_async (blob, Priority.DEFAULT, cancellable, out bytes_written);
 		}
 
 		private uint8[] create_message (MessageType type, uint32 tag, uint8[]? body = null) {
@@ -324,17 +289,22 @@ namespace Frida.Fruity {
 			return blob;
 		}
 
-		protected class Message {
+		private class Message {
 			public MessageType type;
-			public uint8 * body;
-			public uint body_size;
 			public uint32 tag;
+			public uint8 * body;
+			public uint32 body_size;
 
-			public uint8 * data;
-			public uint size;
+			public Message (MessageType type, uint32 tag, uint32 body_size) {
+				this.type = type;
+				this.tag = tag;
+				this.body = malloc (body_size + 1);
+				this.body[body_size] = 0;
+				this.body_size = body_size;
+			}
 
 			~Message () {
-				free (data);
+				free (body);
 			}
 		}
 
