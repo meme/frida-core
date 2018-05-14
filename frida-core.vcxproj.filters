@@ -99,7 +99,7 @@
     <None Include="src\droidy\droidy-client.vala">
       <Filter>Source Files\droidy</Filter>
     </None>
-    <None Include="src\fruity\fruity-client.vala">
+    <None Include="src\fruity\fruity-usbmux-client.vala">
       <Filter>Source Files\fruity</Filter>
     </None>
     <None Include="src\fruity\fruity-property-list.vala">
@@ -164,7 +164,7 @@
     <ClCompile Include="$(IntDir)src\droidy\droidy-client.c">
       <Filter>Source Files\generated\droidy</Filter>
     </ClCompile>
-    <ClCompile Include="$(IntDir)src\fruity\fruity-client.c">
+    <ClCompile Include="$(IntDir)src\fruity\fruity-usbmux-client.c">
       <Filter>Source Files\generated\fruity</Filter>
     </ClCompile>
     <ClCompile Include="$(IntDir)src\fruity\fruity-property-list.c">

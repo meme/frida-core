@@ -272,7 +272,7 @@ tcp_sources = [
 ]
 
 fruity_sources = [
-  'fruity/fruity-client.vala',
+  'fruity/fruity-usbmux-client.vala',
   'fruity/fruity-host-session.vala',
   'fruity/fruity-remote-provider.vala',
   'fruity/fruity-lockdown-provider.vala',
