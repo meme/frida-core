@@ -52,6 +52,16 @@ namespace Frida.Fruity {
 			set_value (key, gval);
 		}
 
+		public unowned Bytes get_bytes (string key) throws IOError {
+			return (Bytes) get_value (key, typeof (Bytes)).get_boxed ();
+		}
+
+		public void set_bytes (string key, Bytes val) {
+			var gval = Value (typeof (Bytes));
+			gval.set_boxed (val);
+			set_value (key, gval);
+		}
+
 		public PropertyList get_plist (string key) throws IOError {
 			return get_value (key, typeof (PropertyList)).get_object () as PropertyList;
 		}
@@ -173,6 +183,9 @@ namespace Frida.Fruity {
 					} else if (type == "integer") {
 						result = Value (typeof (int));
 						result.set_int (int.parse (val));
+					} else if (type == "data") {
+						result = Value (typeof (Bytes));
+						result.take_boxed (new Bytes.take (Base64.decode (val)));
 					}
 
 					return result;
@@ -214,14 +227,18 @@ namespace Frida.Fruity {
 						assert_not_reached ();
 					}
 					var type = val.type ();
-					if (type == typeof (string))
+					if (type == typeof (string)) {
 						write_tag ("string", val.get_string ());
-					else if (type == typeof (int))
+					} else if (type == typeof (int)) {
 						write_tag ("integer", val.get_int ().to_string ());
-					else if (type == typeof (uint))
+					} else if (type == typeof (uint)) {
 						write_tag ("integer", val.get_uint ().to_string ());
-					else if (type == typeof (PropertyList))
+					} else if (type == typeof (Bytes)) {
+						unowned Bytes bytes = (Bytes) val.get_boxed ();
+						write_tag ("data", Base64.encode (bytes.get_data ()));
+					} else if (type == typeof (PropertyList)) {
 						write (val.get_object () as PropertyList);
+					}
 				}
 
 				level--;

@@ -2631,6 +2631,8 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 					"		<integer>4759</integer>\n" +
 					"		<key>SerialNumber</key>\n" +
 					"		<string>220f889780dda462091a65df48b9b6aedb05490f</string>\n" +
+					"		<key>ExtraData</key>\n" +
+					"		<data>AQID</data>\n" +
 					"	</dict>\n" +
 					"</dict>\n" +
 					"</plist>\n";
@@ -2643,12 +2645,18 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 
 					var proplist = plist.get_plist ("Properties");
 					var proplist_keys = proplist.get_keys ();
-					assert (proplist_keys.length == 5);
+					assert (proplist_keys.length == 6);
 					assert (proplist.get_string ("ConnectionType") == "USB");
 					assert (proplist.get_int ("DeviceID") == 2);
 					assert (proplist.get_int ("LocationID") == 0);
 					assert (proplist.get_int ("ProductID") == 4759);
 					assert (proplist.get_string ("SerialNumber") == "220f889780dda462091a65df48b9b6aedb05490f");
+
+					var extra_data = proplist.get_bytes ("ExtraData");
+					assert (extra_data.length == 3);
+					assert (extra_data[0] == 0x01);
+					assert (extra_data[1] == 0x02);
+					assert (extra_data[2] == 0x03);
 				} catch (IOError e) {
 					assert_not_reached ();
 				}
@@ -2662,6 +2670,7 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 				var proplist = new Frida.Fruity.PropertyList ();
 				proplist.set_string ("ConnectionType", "USB");
 				proplist.set_int ("DeviceID", 2);
+				proplist.set_bytes ("ExtraData", new Bytes ({ 0x01, 0x02, 0x03 }));
 				plist.set_plist ("Properties", proplist);
 
 				var actual_xml = plist.to_xml ();
@@ -2680,6 +2689,8 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 					"		<string>USB</string>\n" +
 					"		<key>DeviceID</key>\n" +
 					"		<integer>2</integer>\n" +
+					"		<key>ExtraData</key>\n" +
+					"		<data>AQID</data>\n" +
 					"	</dict>\n" +
 					"</dict>\n" +
 					"</plist>\n";
