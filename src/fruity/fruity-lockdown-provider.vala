@@ -144,8 +144,9 @@ namespace Frida {
 				process_incoming_messages.begin ();
 
 				var type = yield query_type ();
-
 				printerr ("query_type() => %s\n", type);
+
+				yield start_session ();
 			} catch (GLib.Error e) {
 				throw new Error.NOT_SUPPORTED (e.message);
 			}
@@ -159,6 +160,20 @@ namespace Frida {
 			var response = yield query (create_request ("QueryType"));
 
 			return response.get_string ("Type");
+		}
+
+		private async void start_session () throws IOError {
+			assert (is_processing_messages);
+
+			var request = create_request ("StartSession");
+			// TODO: HostID
+			// TODO: SystemBUID
+			var response = yield query (request);
+			if (response.has_key ("Error")) {
+				throw new IOError.FAILED ("Unexpected StartSession response: %s", response.get_string ("Error"));
+			}
+
+			printerr ("response: %s\n", response.to_xml ());
 		}
 
 		private async PropertyList query (PropertyList request) throws IOError {
