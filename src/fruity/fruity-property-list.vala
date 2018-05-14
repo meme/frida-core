@@ -26,13 +26,13 @@ namespace Frida.Fruity {
 			return value_by_key.has_key (key);
 		}
 
-		public string get_string (string key) throws IOError {
-			return get_value (key, typeof (string)).get_string ();
+		public bool get_boolean (string key) throws IOError {
+			return get_value (key, typeof (bool)).get_boolean ();
 		}
 
-		public void set_string (string key, string str) {
-			var gval = Value (typeof (string));
-			gval.set_string (str);
+		public void set_boolean (string key, bool val) {
+			var gval = Value (typeof (bool));
+			gval.set_boolean (val);
 			set_value (key, gval);
 		}
 
@@ -53,6 +53,16 @@ namespace Frida.Fruity {
 		public void set_uint (string key, uint val) {
 			var gval = Value (typeof (uint));
 			gval.set_uint (val);
+			set_value (key, gval);
+		}
+
+		public string get_string (string key) throws IOError {
+			return get_value (key, typeof (string)).get_string ();
+		}
+
+		public void set_string (string key, string str) {
+			var gval = Value (typeof (string));
+			gval.set_string (str);
 			set_value (key, gval);
 		}
 
@@ -180,13 +190,18 @@ namespace Frida.Fruity {
 
 				public Value? to_value () {
 					Value? result = null;
-
-					if (type == "string") {
-						result = Value (typeof (string));
-						result.set_string (val);
+					if (type == "true") {
+						result = Value (typeof (bool));
+						result.set_boolean (true);
+					} else if (type == "false") {
+						result = Value (typeof (bool));
+						result.set_boolean (false);
 					} else if (type == "integer") {
 						result = Value (typeof (int));
 						result.set_int (int.parse (val));
+					} else if (type == "string") {
+						result = Value (typeof (string));
+						result.set_string (val);
 					} else if (type == "data") {
 						result = Value (typeof (Bytes));
 						result.take_boxed (new Bytes.take (Base64.decode (val)));
@@ -231,12 +246,14 @@ namespace Frida.Fruity {
 						assert_not_reached ();
 					}
 					var type = val.type ();
-					if (type == typeof (string)) {
-						write_tag ("string", val.get_string ());
+					if (type == typeof (bool)) {
+						write_tag (val.get_boolean ().to_string ());
 					} else if (type == typeof (int)) {
 						write_tag ("integer", val.get_int ().to_string ());
 					} else if (type == typeof (uint)) {
 						write_tag ("integer", val.get_uint ().to_string ());
+					} else if (type == typeof (string)) {
+						write_tag ("string", val.get_string ());
 					} else if (type == typeof (Bytes)) {
 						unowned Bytes bytes = (Bytes) val.get_boxed ();
 						write_tag ("data", Base64.encode (bytes.get_data ()));
@@ -252,8 +269,11 @@ namespace Frida.Fruity {
 					write_line ("</plist>");
 			}
 
-			private void write_tag (string name, string content) {
-				write_line ("<" + name + ">" + content + "</" + name + ">");
+			private void write_tag (string name, string? content = null) {
+				if (content != null)
+					write_line ("<" + name + ">" + content + "</" + name + ">");
+				else
+					write_line ("<" + name + "/>");
 			}
 
 			private void write_line (string line) {

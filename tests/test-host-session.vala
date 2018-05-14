@@ -2631,6 +2631,10 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 					"		<integer>4759</integer>\n" +
 					"		<key>SerialNumber</key>\n" +
 					"		<string>220f889780dda462091a65df48b9b6aedb05490f</string>\n" +
+					"		<key>ExtraBoolTrue</key>\n" +
+					"		<true/>\n" +
+					"		<key>ExtraBoolFalse</key>\n" +
+					"		<false/>\n" +
 					"		<key>ExtraData</key>\n" +
 					"		<data>AQID</data>\n" +
 					"	</dict>\n" +
@@ -2645,12 +2649,15 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 
 					var proplist = plist.get_plist ("Properties");
 					var proplist_keys = proplist.get_keys ();
-					assert (proplist_keys.length == 6);
+					assert (proplist_keys.length == 8);
 					assert (proplist.get_string ("ConnectionType") == "USB");
 					assert (proplist.get_int ("DeviceID") == 2);
 					assert (proplist.get_int ("LocationID") == 0);
 					assert (proplist.get_int ("ProductID") == 4759);
 					assert (proplist.get_string ("SerialNumber") == "220f889780dda462091a65df48b9b6aedb05490f");
+
+					assert (proplist.get_boolean ("ExtraBoolTrue") == true);
+					assert (proplist.get_boolean ("ExtraBoolFalse") == false);
 
 					var extra_data = proplist.get_bytes ("ExtraData");
 					assert (extra_data.length == 3);
@@ -2670,6 +2677,8 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 				var proplist = new Frida.Fruity.PropertyList ();
 				proplist.set_string ("ConnectionType", "USB");
 				proplist.set_int ("DeviceID", 2);
+				proplist.set_boolean ("ExtraBoolTrue", true);
+				proplist.set_boolean ("ExtraBoolFalse", false);
 				proplist.set_bytes ("ExtraData", new Bytes ({ 0x01, 0x02, 0x03 }));
 				plist.set_plist ("Properties", proplist);
 
@@ -2689,6 +2698,10 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 					"		<string>USB</string>\n" +
 					"		<key>DeviceID</key>\n" +
 					"		<integer>2</integer>\n" +
+					"		<key>ExtraBoolFalse</key>\n" +
+					"		<false/>\n" +
+					"		<key>ExtraBoolTrue</key>\n" +
+					"		<true/>\n" +
 					"		<key>ExtraData</key>\n" +
 					"		<data>AQID</data>\n" +
 					"	</dict>\n" +
