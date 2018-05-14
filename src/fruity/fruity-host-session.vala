@@ -1,6 +1,6 @@
 namespace Frida {
 	public class FruityHostSessionBackend : Object, HostSessionBackend {
-		private Fruity.UsbMuxClient control_client;
+		private Fruity.UsbmuxClient control_client;
 
 		private Gee.HashSet<uint> devices = new Gee.HashSet<uint> ();
 		private Gee.HashMap<uint, FruityRemoteProvider> remote_providers = new Gee.HashMap<uint, FruityRemoteProvider> ();
@@ -29,7 +29,7 @@ namespace Frida {
 
 			bool success = true;
 
-			control_client = new Fruity.UsbMuxClient ();
+			control_client = new Fruity.UsbmuxClient ();
 			control_client.device_attached.connect ((id, product_id, udid) => {
 				add_device.begin (id, product_id, udid);
 			});

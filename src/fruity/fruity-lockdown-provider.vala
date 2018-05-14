@@ -80,7 +80,7 @@ namespace Frida {
 			construct;
 		}
 
-		private Fruity.UsbMuxClient transport = new Fruity.UsbMuxClient ();
+		private Fruity.UsbmuxClient transport = new Fruity.UsbmuxClient ();
 
 		private const uint LOCKDOWN_PORT = 62078;
 

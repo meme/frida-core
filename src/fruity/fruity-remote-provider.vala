@@ -68,7 +68,7 @@ namespace Frida {
 					throw new Error.INVALID_ARGUMENT ("Invalid location: already created");
 			}
 
-			Fruity.UsbMuxClient client = new Fruity.UsbMuxClient ();
+			Fruity.UsbmuxClient client = new Fruity.UsbmuxClient ();
 			DBusConnection connection;
 			try {
 				yield client.establish ();
@@ -153,7 +153,7 @@ namespace Frida {
 				construct;
 			}
 
-			public Fruity.UsbMuxClient client {
+			public Fruity.UsbmuxClient client {
 				get;
 				construct;
 			}
@@ -170,7 +170,7 @@ namespace Frida {
 
 			private Gee.HashMap<AgentSessionId?, AgentSession> agent_session_by_id = new Gee.HashMap<AgentSessionId?, AgentSession> ();
 
-			public Entry (uint port, Fruity.UsbMuxClient client, DBusConnection connection, HostSession host_session) {
+			public Entry (uint port, Fruity.UsbmuxClient client, DBusConnection connection, HostSession host_session) {
 				Object (port: port, client: client, connection: connection, host_session: host_session);
 
 				host_session.agent_session_destroyed.connect (on_agent_session_destroyed);
