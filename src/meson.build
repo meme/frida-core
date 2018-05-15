@@ -272,11 +272,12 @@ tcp_sources = [
 ]
 
 fruity_sources = [
-  'fruity/fruity-usbmux-client.vala',
   'fruity/fruity-host-session.vala',
   'fruity/fruity-remote-provider.vala',
   'fruity/fruity-lockdown-provider.vala',
-  'fruity/fruity-property-list.vala',
+  'fruity/lockdown-session.vala',
+  'fruity/usbmux-client.vala',
+  'fruity/property-list.vala',
 ]
 if host_os_family == 'windows'
   fruity_sources += ['fruity/fruity-host-session-windows.c']
