@@ -15,19 +15,21 @@ namespace Frida.Fruity {
 
 		private const uint LOCKDOWN_PORT = 62078;
 
+		private LockdownSession (DeviceDetails device_details) {
+			Object (device_details: device_details);
+		}
+
 		public static async LockdownSession open (DeviceDetails device_details, Cancellable? cancellable = null) throws LockdownError {
+			var session = new LockdownSession (device_details);
+
 			try {
-				var session = yield AsyncInitable.new_async (
-					typeof (LockdownSession),
-					Priority.DEFAULT,
-					cancellable,
-					"device-details", device_details
-				);
-				return session as LockdownSession;
+				yield session.init_async (Priority.DEFAULT, cancellable);
 			} catch (GLib.Error e) {
 				assert (e is LockdownError);
 				throw (LockdownError) e;
 			}
+
+			return session;
 		}
 
 		private async bool init_async (int io_priority, Cancellable? cancellable) throws LockdownError {

@@ -2664,7 +2664,7 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 					assert (extra_data[0] == 0x01);
 					assert (extra_data[1] == 0x02);
 					assert (extra_data[2] == 0x03);
-				} catch (IOError e) {
+				} catch (Frida.Fruity.PropertyListError e) {
 					assert_not_reached ();
 				}
 			}

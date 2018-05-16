@@ -21,13 +21,16 @@ namespace Frida.Fruity {
 		public signal void device_detached (DeviceId id);
 
 		public static async UsbmuxClient open (Cancellable? cancellable = null) throws UsbmuxError {
+			var client = new UsbmuxClient ();
+
 			try {
-				var client = yield AsyncInitable.new_async (typeof (UsbmuxClient), Priority.DEFAULT, cancellable);
-				return client as UsbmuxClient;
+				yield client.init_async (Priority.DEFAULT, cancellable);
 			} catch (GLib.Error e) {
 				assert (e is UsbmuxError);
 				throw (UsbmuxError) e;
 			}
+
+			return client;
 		}
 
 		construct {
