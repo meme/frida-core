@@ -49,6 +49,7 @@ namespace Frida {
 
 		public async HostSession create (string? location = null) throws Error {
 			var session = yield Fruity.LockdownSession.open (device_details);
+			yield session.start_service ("com.apple.mobile.installation_proxy");
 			yield session.close ();
 
 			throw new Error.NOT_SUPPORTED ("Not yet fully implemented");

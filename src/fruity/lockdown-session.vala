@@ -1,12 +1,17 @@
 namespace Frida.Fruity {
 	public class LockdownSession : Object {
-		public Fruity.DeviceDetails device_details {
+		public DeviceDetails device_details {
 			get;
 			construct;
 		}
 
-		private Fruity.UsbmuxClient transport = new Fruity.UsbmuxClient ();
-		private SocketConnection connection;
+		public uint port {
+			get;
+			construct;
+		}
+
+		private UsbmuxClient transport = new UsbmuxClient ();
+		private IOStream connection;
 		private InputStream input;
 		private OutputStream output;
 		private Cancellable cancellable = new Cancellable ();
@@ -17,8 +22,11 @@ namespace Frida.Fruity {
 		private const uint LOCKDOWN_PORT = 62078;
 		private const uint32 MAX_MESSAGE_SIZE = 128 * 1024;
 
-		private LockdownSession (Fruity.DeviceDetails device_details) {
-			Object (device_details: device_details);
+		private LockdownSession (DeviceDetails device_details, uint port) {
+			Object (
+				device_details: device_details,
+				port: port
+			);
 		}
 
 		construct {
@@ -33,8 +41,8 @@ namespace Frida.Fruity {
 			is_processing_messages = false;
 		}
 
-		public static async LockdownSession open (Fruity.DeviceDetails device_details) throws Error {
-			var session = new LockdownSession (device_details);
+		public static async LockdownSession open (DeviceDetails device_details) throws Error {
+			var session = new LockdownSession (device_details, LOCKDOWN_PORT);
 			yield session.establish ();
 			return session;
 		}
@@ -59,31 +67,45 @@ namespace Frida.Fruity {
 			transport = null;
 		}
 
+		public async UsbmuxClient start_service (string name) throws Error {
+			assert (is_processing_messages);
+
+			var request = create_request ("StartService");
+			request.set_string ("Service", name);
+
+			try {
+				var response = yield query (request);
+
+				var service_transport = new UsbmuxClient ();
+				yield service_transport.establish ();
+				yield service_transport.connect_to_port (device_details.id, response.get_int ("Port"));
+				return service_transport;
+			} catch (IOError e) {
+				throw new Error.NOT_SUPPORTED ("%s", e.message);
+			}
+		}
+
 		private async void establish () throws Error {
 			try {
 				yield transport.establish ();
 
 				var pair_record = yield transport.read_pair_record (device_details.udid);
 
-				yield transport.connect_to_port (device_details.id, LOCKDOWN_PORT);
+				yield transport.connect_to_port (device_details.id, port);
 
 				connection = transport.connection;
 				input = connection.get_input_stream ();
 				output = connection.get_output_stream ();
 
 				is_processing_messages = true;
-
 				process_incoming_messages.begin ();
 
 				var type = yield query_type ();
-				printerr ("query_type() => %s\n", type);
 
 				yield start_session (pair_record);
 			} catch (GLib.Error e) {
-				throw new Error.NOT_SUPPORTED (e.message);
+				throw new Error.NOT_SUPPORTED ("%s", e.message);
 			}
-
-			printerr ("CONNECTED!\n");
 		}
 
 		private async string query_type () throws IOError {
@@ -118,13 +140,29 @@ namespace Frida.Fruity {
 
 				try {
 					var connection = TlsClientConnection.new (this.connection, null);
+					connection.accept_certificate.connect (on_accept_certificate);
+
+					var host_cert = pair_record.get_bytes_as_string ("HostCertificate");
+					var host_key = pair_record.get_bytes_as_string ("HostPrivateKey");
+					var host_certificate = new TlsCertificate.from_pem (string.join ("\n", host_cert, host_key), -1);
+					connection.set_certificate (host_certificate);
+
+					yield connection.handshake_async (Priority.DEFAULT, cancellable);
+
+					this.connection = connection;
+					this.input = connection.get_input_stream ();
+					this.output = connection.get_output_stream ();
+
+					is_processing_messages = true;
+					process_incoming_messages.begin ();
 				} catch (GLib.Error e) {
-					printerr ("Oops: %s\n", e.message);
-					assert_not_reached ();
+					throw new IOError.FAILED ("%s", e.message);
 				}
 			}
+		}
 
-			printerr ("response: %s\n", response.to_xml ());
+		private bool on_accept_certificate (TlsCertificate peer_cert, TlsCertificateFlags errors) {
+			return true;
 		}
 
 		private async PropertyList query (PropertyList request) throws IOError {

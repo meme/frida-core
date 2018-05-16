@@ -70,6 +70,12 @@ namespace Frida.Fruity {
 			return (Bytes) get_value (key, typeof (Bytes)).get_boxed ();
 		}
 
+		public string get_bytes_as_string (string key) throws IOError {
+			var bytes = get_bytes (key);
+			unowned string unterminated_str = (string) bytes.get_data ();
+			return unterminated_str[0:bytes.length];
+		}
+
 		public void set_bytes (string key, Bytes val) {
 			var gval = Value (typeof (Bytes));
 			gval.set_boxed (val);
