@@ -5,11 +5,6 @@ namespace Frida.Fruity {
 			construct;
 		}
 
-		public uint port {
-			get;
-			construct;
-		}
-
 		private UsbmuxClient transport;
 		private PropertyRpcClient client;
 
@@ -40,7 +35,7 @@ namespace Frida.Fruity {
 
 				var pair_record = yield transport.read_pair_record (device.udid);
 
-				yield transport.connect_to_port (device.id, port);
+				yield transport.connect_to_port (device.id, LOCKDOWN_PORT);
 
 				client = new PropertyRpcClient (transport.connection);
 				client.open ();
