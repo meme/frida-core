@@ -2,12 +2,12 @@ namespace Frida.Fruity {
 	public class PropertyList : Object {
 		private Gee.HashMap<string, Value?> value_by_key = new Gee.HashMap<string, Value?> ();
 
-		public PropertyList.from_xml (string xml) throws IOError {
+		public PropertyList.from_xml (string xml) throws PropertyListError {
 			try {
 				var parser = new XmlParser (this);
 				parser.parse (xml);
 			} catch (MarkupError e) {
-				throw new IOError.FAILED (e.message);
+				throw new PropertyListError.INVALID_DATA (e.message);
 			}
 		}
 
@@ -26,7 +26,7 @@ namespace Frida.Fruity {
 			return value_by_key.has_key (key);
 		}
 
-		public bool get_boolean (string key) throws IOError {
+		public bool get_boolean (string key) throws PropertyListError {
 			return get_value (key, typeof (bool)).get_boolean ();
 		}
 
@@ -36,7 +36,7 @@ namespace Frida.Fruity {
 			set_value (key, gval);
 		}
 
-		public int get_int (string key) throws IOError {
+		public int get_int (string key) throws PropertyListError {
 			return get_value (key, typeof (int)).get_int ();
 		}
 
@@ -46,7 +46,7 @@ namespace Frida.Fruity {
 			set_value (key, gval);
 		}
 
-		public uint get_uint (string key) throws IOError {
+		public uint get_uint (string key) throws PropertyListError {
 			return get_value (key, typeof (uint)).get_uint ();
 		}
 
@@ -56,7 +56,7 @@ namespace Frida.Fruity {
 			set_value (key, gval);
 		}
 
-		public string get_string (string key) throws IOError {
+		public string get_string (string key) throws PropertyListError {
 			return get_value (key, typeof (string)).get_string ();
 		}
 
@@ -66,11 +66,11 @@ namespace Frida.Fruity {
 			set_value (key, gval);
 		}
 
-		public unowned Bytes get_bytes (string key) throws IOError {
+		public unowned Bytes get_bytes (string key) throws PropertyListError {
 			return (Bytes) get_value (key, typeof (Bytes)).get_boxed ();
 		}
 
-		public string get_bytes_as_string (string key) throws IOError {
+		public string get_bytes_as_string (string key) throws PropertyListError {
 			var bytes = get_bytes (key);
 			unowned string unterminated_str = (string) bytes.get_data ();
 			return unterminated_str[0:bytes.length];
@@ -82,7 +82,7 @@ namespace Frida.Fruity {
 			set_value (key, gval);
 		}
 
-		public PropertyList get_plist (string key) throws IOError {
+		public PropertyList get_plist (string key) throws PropertyListError {
 			return get_value (key, typeof (PropertyList)).get_object () as PropertyList;
 		}
 
@@ -92,12 +92,12 @@ namespace Frida.Fruity {
 			set_value (key, gval);
 		}
 
-		private Value get_value (string key, Type expected_type = Type.INVALID) throws IOError {
+		private Value get_value (string key, Type expected_type = Type.INVALID) throws PropertyListError {
 			var val = value_by_key[key];
 			if (val == null)
-				throw new IOError.FAILED ("Property list key '%s' does not exist".printf (key));
+				throw new PropertyListError.KEY_NOT_FOUND ("Property list key '%s' does not exist".printf (key));
 			if (expected_type != Type.INVALID && !val.holds (expected_type))
-				throw new IOError.FAILED ("Property list key '%s' does not have the expected type".printf (key));
+				throw new PropertyListError.TYPE_MISMATCH ("Property list key '%s' does not have the expected type".printf (key));
 			return val;
 		}
 
@@ -248,7 +248,7 @@ namespace Frida.Fruity {
 					Value val;
 					try {
 						val = plist.get_value (key);
-					} catch (IOError e) {
+					} catch (PropertyListError e) {
 						assert_not_reached ();
 					}
 					var type = val.type ();
@@ -289,5 +289,11 @@ namespace Frida.Fruity {
 				builder.append ("\n");
 			}
 		}
+	}
+
+	public errordomain PropertyListError {
+		INVALID_DATA,
+		KEY_NOT_FOUND,
+		TYPE_MISMATCH
 	}
 }

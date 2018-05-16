@@ -62,10 +62,10 @@ namespace Frida {
 					throw new Error.INVALID_ARGUMENT ("Invalid location: already created");
 			}
 
-			Fruity.UsbmuxClient client = new Fruity.UsbmuxClient ();
+			Fruity.UsbmuxClient client;
 			DBusConnection connection;
 			try {
-				yield client.establish ();
+				client = yield Fruity.UsbmuxClient.open ();
 				yield client.connect_to_port (device_details.id, port);
 				connection = yield new DBusConnection (client.connection, null, DBusConnectionFlags.AUTHENTICATION_CLIENT);
 			} catch (GLib.Error e) {

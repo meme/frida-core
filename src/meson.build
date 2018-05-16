@@ -276,7 +276,8 @@ fruity_sources = [
   'fruity/fruity-remote-provider.vala',
   'fruity/fruity-lockdown-provider.vala',
   'fruity/lockdown-session.vala',
-  'fruity/usbmux-client.vala',
+  'fruity/usbmux.vala',
+  'fruity/property-rpc.vala',
   'fruity/property-list.vala',
 ]
 if host_os_family == 'windows'

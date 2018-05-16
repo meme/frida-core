@@ -29,18 +29,18 @@ namespace Frida {
 
 			bool success = true;
 
-			control_client = new Fruity.UsbmuxClient ();
-			control_client.device_attached.connect ((details) => {
-				add_device.begin (details);
-			});
-			control_client.device_detached.connect ((id) => {
-				remove_device (id);
-			});
-
 			try {
-				yield control_client.establish ();
+				control_client = yield Fruity.UsbmuxClient.open ();
+
+				control_client.device_attached.connect ((details) => {
+					add_device.begin (details);
+				});
+				control_client.device_detached.connect ((id) => {
+					remove_device (id);
+				});
+
 				yield control_client.enable_listen_mode ();
-			} catch (IOError e) {
+			} catch (Fruity.UsbmuxError e) {
 				success = false;
 			}
 
@@ -49,7 +49,7 @@ namespace Frida {
 				try {
 					yield control_client.connect_to_port (Fruity.DeviceId (uint.MAX), uint.MAX);
 					assert_not_reached ();
-				} catch (IOError expected_error) {
+				} catch (Fruity.UsbmuxError expected_error) {
 				}
 			}
 
