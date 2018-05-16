@@ -105,6 +105,25 @@ namespace Frida.Fruity {
 			if (response.has_key ("Error"))
 				throw new IOError.FAILED ("Unexpected StartSession response: %s", response.get_string ("Error"));
 
+			if (response.get_boolean ("EnableSessionSSL")) {
+				is_processing_messages = false;
+
+				var source = new IdleSource ();
+				source.set_callback (() => {
+					start_session.callback ();
+					return false;
+				});
+				source.attach (MainContext.get_thread_default ());
+				yield;
+
+				try {
+					var connection = TlsClientConnection.new (this.connection, null);
+				} catch (GLib.Error e) {
+					printerr ("Oops: %s\n", e.message);
+					assert_not_reached ();
+				}
+			}
+
 			printerr ("response: %s\n", response.to_xml ());
 		}
 
