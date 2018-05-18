@@ -35,12 +35,12 @@ namespace Frida.HostSessionTest {
 			h.run ();
 		});
 
-		GLib.Test.add_func ("/HostSession/Fruity/PropertyList/can-construct-from-xml-document", () => {
-			Fruity.PropertyList.can_construct_from_xml_document ();
+		GLib.Test.add_func ("/HostSession/Fruity/Plist/can-construct-from-xml-document", () => {
+			Fruity.Plist.can_construct_from_xml_document ();
 		});
 
-		GLib.Test.add_func ("/HostSession/Fruity/PropertyList/to-xml-yields-complete-document", () => {
-			Fruity.PropertyList.to_xml_yields_complete_document ();
+		GLib.Test.add_func ("/HostSession/Fruity/Plist/to-xml-yields-complete-document", () => {
+			Fruity.Plist.to_xml_yields_complete_document ();
 		});
 
 		GLib.Test.add_func ("/HostSession/Fruity/backend", () => {
@@ -2591,7 +2591,7 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 		namespace Manual {
 
 			private static async void enumerate_applications (Harness h) {
-				var device_id = "<udid>";
+				var device_id = "5cb26a937ef2d389419ecbe2ec21eec08338e060";
 
 				var device_manager = new DeviceManager ();
 
@@ -2607,7 +2607,7 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 
 		}
 
-		namespace PropertyList {
+		namespace Plist {
 
 			private static void can_construct_from_xml_document () {
 				var xml =
@@ -2641,7 +2641,7 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 					"</dict>\n" +
 					"</plist>\n";
 				try {
-					var plist = new Frida.Fruity.PropertyList.from_xml (xml);
+					var plist = new Frida.Fruity.Plist.from_xml (xml);
 					var plist_keys = plist.get_keys ();
 					assert (plist_keys.length == 3);
 					assert (plist.get_int ("DeviceID") == 2);
@@ -2664,17 +2664,17 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 					assert (extra_data[0] == 0x01);
 					assert (extra_data[1] == 0x02);
 					assert (extra_data[2] == 0x03);
-				} catch (Frida.Fruity.PropertyListError e) {
+				} catch (Frida.Fruity.PlistError e) {
 					assert_not_reached ();
 				}
 			}
 
 			private static void to_xml_yields_complete_document () {
-				var plist = new Frida.Fruity.PropertyList ();
+				var plist = new Frida.Fruity.Plist ();
 				plist.set_string ("MessageType", "Detached");
 				plist.set_int ("DeviceID", 2);
 
-				var proplist = new Frida.Fruity.PropertyList ();
+				var proplist = new Frida.Fruity.Plist ();
 				proplist.set_string ("ConnectionType", "USB");
 				proplist.set_int ("DeviceID", 2);
 				proplist.set_boolean ("ExtraBoolTrue", true);

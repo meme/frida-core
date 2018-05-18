@@ -1,13 +1,13 @@
 namespace Frida.Fruity {
-	public class PropertyList : Object {
+	public class Plist : Object {
 		private Gee.HashMap<string, Value?> value_by_key = new Gee.HashMap<string, Value?> ();
 
-		public PropertyList.from_xml (string xml) throws PropertyListError {
+		public Plist.from_xml (string xml) throws PlistError {
 			try {
 				var parser = new XmlParser (this);
 				parser.parse (xml);
 			} catch (MarkupError e) {
-				throw new PropertyListError.INVALID_DATA (e.message);
+				throw new PlistError.INVALID_DATA (e.message);
 			}
 		}
 
@@ -26,7 +26,7 @@ namespace Frida.Fruity {
 			return value_by_key.has_key (key);
 		}
 
-		public bool get_boolean (string key) throws PropertyListError {
+		public bool get_boolean (string key) throws PlistError {
 			return get_value (key, typeof (bool)).get_boolean ();
 		}
 
@@ -36,7 +36,7 @@ namespace Frida.Fruity {
 			set_value (key, gval);
 		}
 
-		public int get_int (string key) throws PropertyListError {
+		public int get_int (string key) throws PlistError {
 			return get_value (key, typeof (int)).get_int ();
 		}
 
@@ -46,7 +46,7 @@ namespace Frida.Fruity {
 			set_value (key, gval);
 		}
 
-		public uint get_uint (string key) throws PropertyListError {
+		public uint get_uint (string key) throws PlistError {
 			return get_value (key, typeof (uint)).get_uint ();
 		}
 
@@ -56,7 +56,7 @@ namespace Frida.Fruity {
 			set_value (key, gval);
 		}
 
-		public string get_string (string key) throws PropertyListError {
+		public string get_string (string key) throws PlistError {
 			return get_value (key, typeof (string)).get_string ();
 		}
 
@@ -66,11 +66,11 @@ namespace Frida.Fruity {
 			set_value (key, gval);
 		}
 
-		public unowned Bytes get_bytes (string key) throws PropertyListError {
+		public unowned Bytes get_bytes (string key) throws PlistError {
 			return (Bytes) get_value (key, typeof (Bytes)).get_boxed ();
 		}
 
-		public string get_bytes_as_string (string key) throws PropertyListError {
+		public string get_bytes_as_string (string key) throws PlistError {
 			var bytes = get_bytes (key);
 			unowned string unterminated_str = (string) bytes.get_data ();
 			return unterminated_str[0:bytes.length];
@@ -82,22 +82,22 @@ namespace Frida.Fruity {
 			set_value (key, gval);
 		}
 
-		public PropertyList get_plist (string key) throws PropertyListError {
-			return get_value (key, typeof (PropertyList)).get_object () as PropertyList;
+		public Plist get_plist (string key) throws PlistError {
+			return get_value (key, typeof (Plist)).get_object () as Plist;
 		}
 
-		public void set_plist (string key, PropertyList plist) {
-			var gval = Value (typeof (PropertyList));
+		public void set_plist (string key, Plist plist) {
+			var gval = Value (typeof (Plist));
 			gval.set_object (plist);
 			set_value (key, gval);
 		}
 
-		private Value get_value (string key, Type expected_type = Type.INVALID) throws PropertyListError {
+		private Value get_value (string key, Type expected_type = Type.INVALID) throws PlistError {
 			var val = value_by_key[key];
 			if (val == null)
-				throw new PropertyListError.KEY_NOT_FOUND ("Property list key '%s' does not exist".printf (key));
+				throw new PlistError.KEY_NOT_FOUND ("Property list key '%s' does not exist".printf (key));
 			if (expected_type != Type.INVALID && !val.holds (expected_type))
-				throw new PropertyListError.TYPE_MISMATCH ("Property list key '%s' does not have the expected type".printf (key));
+				throw new PlistError.TYPE_MISMATCH ("Property list key '%s' does not have the expected type".printf (key));
 			return val;
 		}
 
@@ -106,7 +106,7 @@ namespace Frida.Fruity {
 		}
 
 		private class XmlParser : Object {
-			public PropertyList plist {
+			public Plist plist {
 				get;
 				construct;
 			}
@@ -119,15 +119,15 @@ namespace Frida.Fruity {
 				null
 			};
 
-			private Gee.Deque<PropertyList> stack;
+			private Gee.Deque<Plist> stack;
 			private KeyValuePair current_pair;
 
-			public XmlParser (PropertyList plist) {
+			public XmlParser (Plist plist) {
 				Object (plist: plist);
 			}
 
 			public void parse (string xml) throws MarkupError {
-				stack = new Gee.LinkedList<PropertyList> ();
+				stack = new Gee.LinkedList<Plist> ();
 				current_pair = null;
 
 				var context = new MarkupParseContext (parser, 0, this, null);
@@ -154,9 +154,9 @@ namespace Frida.Fruity {
 					if (current_pair.type == "dict") {
 						var parent_plist = stack.peek ();
 
-						var child_plist = new PropertyList ();
+						var child_plist = new Plist ();
 						stack.offer_head (child_plist);
-						var child_plist_value = Value (typeof (PropertyList));
+						var child_plist_value = Value (typeof (Plist));
 						child_plist_value.set_object (child_plist);
 						parent_plist.set_value (current_pair.key, child_plist_value);
 
@@ -226,10 +226,10 @@ namespace Frida.Fruity {
 				this.builder = builder;
 			}
 
-			public void write (PropertyList plist) {
+			public void write (Plist plist) {
 				if (level == 0) {
 					write_line ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
-					write_line ("<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">");
+					write_line ("<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/Plist-1.0.dtd\">");
 					write_line ("<plist version=\"1.0\">");
 				}
 
@@ -248,7 +248,7 @@ namespace Frida.Fruity {
 					Value val;
 					try {
 						val = plist.get_value (key);
-					} catch (PropertyListError e) {
+					} catch (PlistError e) {
 						assert_not_reached ();
 					}
 					var type = val.type ();
@@ -263,8 +263,8 @@ namespace Frida.Fruity {
 					} else if (type == typeof (Bytes)) {
 						unowned Bytes bytes = (Bytes) val.get_boxed ();
 						write_tag ("data", Base64.encode (bytes.get_data ()));
-					} else if (type == typeof (PropertyList)) {
-						write (val.get_object () as PropertyList);
+					} else if (type == typeof (Plist)) {
+						write (val.get_object () as Plist);
 					}
 				}
 
@@ -291,7 +291,7 @@ namespace Frida.Fruity {
 		}
 	}
 
-	public errordomain PropertyListError {
+	public errordomain PlistError {
 		INVALID_DATA,
 		KEY_NOT_FOUND,
 		TYPE_MISMATCH

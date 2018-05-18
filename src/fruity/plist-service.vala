@@ -1,5 +1,5 @@
 namespace Frida.Fruity {
-	public class PropertyRpcClient : Object {
+	public class PlistServiceClient : Object {
 		public IOStream stream {
 			get;
 			construct;
@@ -14,7 +14,7 @@ namespace Frida.Fruity {
 
 		private const uint32 MAX_MESSAGE_SIZE = 128 * 1024;
 
-		public PropertyRpcClient (IOStream stream) {
+		public PlistServiceClient (IOStream stream) {
 			Object (stream: stream);
 		}
 
@@ -45,7 +45,7 @@ namespace Frida.Fruity {
 			yield;
 		}
 
-		public async void enable_encryption (PropertyList pair_record) throws PropertyRpcError {
+		public async void enable_encryption (Plist pair_record) throws PlistServiceError {
 			is_processing_messages = false;
 
 			var source = new IdleSource ();
@@ -74,7 +74,7 @@ namespace Frida.Fruity {
 				is_processing_messages = true;
 				process_incoming_messages.begin ();
 			} catch (GLib.Error e) {
-				throw new PropertyRpcError.FAILED ("%s", e.message);
+				throw new PlistServiceError.FAILED ("%s", e.message);
 			}
 		}
 
@@ -82,7 +82,7 @@ namespace Frida.Fruity {
 			return true;
 		}
 
-		public async PropertyList query (PropertyList request) throws PropertyRpcError {
+		public async Plist query (Plist request) throws PlistServiceError {
 			var msg = create_message (request);
 
 			var pending = new PendingResponse (() => query.callback ());
@@ -97,8 +97,8 @@ namespace Frida.Fruity {
 			return response;
 		}
 
-		public PropertyList create_request (string request_type) {
-			var request = new PropertyList ();
+		public Plist create_request (string request_type) {
+			var request = new Plist ();
 			request.set_string ("Request", request_type);
 			request.set_string ("Label", "Xcode");
 			request.set_string ("ProtocolVersion", "2");
@@ -110,27 +110,27 @@ namespace Frida.Fruity {
 				try {
 					var msg = yield read_message ();
 					handle_response_message (msg);
-				} catch (PropertyRpcError e) {
+				} catch (PlistServiceError e) {
 					foreach (var pending_response in pending_responses)
 						pending_response.complete_with_error (e);
 				}
 			}
 		}
 
-		private void handle_response_message (PropertyList response) throws PropertyRpcError {
+		private void handle_response_message (Plist response) throws PlistServiceError {
 			var pending = pending_responses.poll_head ();
 			if (pending == null)
-				throw new PropertyRpcError.PROTOCOL ("Unexpected reply");
+				throw new PlistServiceError.PROTOCOL ("Unexpected reply");
 			pending.complete_with_response (response);
 		}
 
-		private async PropertyList read_message () throws PropertyRpcError {
+		private async Plist read_message () throws PlistServiceError {
 			uint32 size = 0;
 			unowned uint8[] size_buf = ((uint8[]) &size)[0:4];
 			yield read (size_buf);
 			size = uint32.from_big_endian (size);
 			if (size < 1 || size > MAX_MESSAGE_SIZE)
-				throw new PropertyRpcError.PROTOCOL ("Invalid message size");
+				throw new PlistServiceError.PROTOCOL ("Invalid message size");
 
 			var body_buf = new uint8[size + 1];
 			body_buf[size] = 0;
@@ -138,21 +138,21 @@ namespace Frida.Fruity {
 
 			unowned string body_xml = (string) body_buf;
 			try {
-				return new PropertyList.from_xml (body_xml);
-			} catch (PropertyListError e) {
-				throw new PropertyRpcError.PROTOCOL ("Malformed message: %s", e.message);
+				return new Plist.from_xml (body_xml);
+			} catch (PlistError e) {
+				throw new PlistServiceError.PROTOCOL ("Malformed message: %s", e.message);
 			}
 		}
 
-		private async void read (uint8[] buffer) throws PropertyRpcError {
+		private async void read (uint8[] buffer) throws PlistServiceError {
 			size_t bytes_read;
 			try {
 				yield input.read_all_async (buffer, Priority.DEFAULT, cancellable, out bytes_read);
 			} catch (GLib.Error e) {
-				throw new PropertyRpcError.CONNECTION_CLOSED ("%s", e.message);
+				throw new PlistServiceError.CONNECTION_CLOSED ("%s", e.message);
 			}
 			if (bytes_read == 0)
-				throw new PropertyRpcError.CONNECTION_CLOSED ("Connection closed");
+				throw new PlistServiceError.CONNECTION_CLOSED ("Connection closed");
 		}
 
 		private async void write_message (uint8[] blob) throws GLib.Error {
@@ -160,7 +160,7 @@ namespace Frida.Fruity {
 			yield output.write_all_async (blob, Priority.DEFAULT, cancellable, out bytes_written);
 		}
 
-		private uint8[] create_message (PropertyList request) {
+		private uint8[] create_message (Plist request) {
 			var xml = request.to_xml ();
 			unowned uint8[] body = ((uint8[]) xml)[0:xml.length];
 
@@ -179,12 +179,12 @@ namespace Frida.Fruity {
 			public delegate void CompletionHandler ();
 			private CompletionHandler handler;
 
-			public PropertyList? response {
+			public Plist? response {
 				get;
 				private set;
 			}
 
-			public PropertyRpcError? error {
+			public PlistServiceError? error {
 				get;
 				private set;
 			}
@@ -193,19 +193,19 @@ namespace Frida.Fruity {
 				this.handler = (owned) handler;
 			}
 
-			public void complete_with_response (PropertyList? response) {
+			public void complete_with_response (Plist? response) {
 				this.response = response;
 				handler ();
 			}
 
-			public void complete_with_error (PropertyRpcError? error) {
+			public void complete_with_error (PlistServiceError? error) {
 				this.error = error;
 				handler ();
 			}
 		}
 	}
 
-	public errordomain PropertyRpcError {
+	public errordomain PlistServiceError {
 		FAILED,
 		CONNECTION_CLOSED,
 		PROTOCOL

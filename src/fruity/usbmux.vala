@@ -113,7 +113,7 @@ namespace Frida.Fruity {
 				var result = response.get_int ("Number");
 				if (result != ResultCode.SUCCESS)
 					throw new UsbmuxError.FAILED ("Unexpected result while trying to enable listen mode: %d", result);
-			} catch (PropertyListError e) {
+			} catch (PlistError e) {
 				throw new UsbmuxError.PROTOCOL ("Unexpected response: %s", e.message);
 			}
 		}
@@ -141,12 +141,12 @@ namespace Frida.Fruity {
 					default:
 						throw new UsbmuxError.FAILED ("Unable to connect (error code: %d)", result);
 				}
-			} catch (PropertyListError e) {
+			} catch (PlistError e) {
 				throw new UsbmuxError.PROTOCOL ("Unexpected response: %s", e.message);
 			}
 		}
 
-		public async PropertyList read_pair_record (Udid udid) throws UsbmuxError {
+		public async Plist read_pair_record (Udid udid) throws UsbmuxError {
 			var request = create_request ("ReadPairRecord");
 			request.set_string ("PairRecordID", udid.raw_value);
 
@@ -163,13 +163,13 @@ namespace Frida.Fruity {
 				var raw_record = response.get_bytes ("PairRecordData");
 				unowned string record_xml_unterminated = (string) raw_record.get_data ();
 				string record_xml = record_xml_unterminated[0:raw_record.length];
-				return new PropertyList.from_xml (record_xml);
-			} catch (PropertyListError e) {
+				return new Plist.from_xml (record_xml);
+			} catch (PlistError e) {
 				throw new UsbmuxError.PROTOCOL ("Unexpected response: %s", e.message);
 			}
 		}
 
-		private async PropertyList query (PropertyList request, bool is_mode_switch_request = false) throws UsbmuxError {
+		private async Plist query (Plist request, bool is_mode_switch_request = false) throws UsbmuxError {
 			uint32 tag = last_tag++;
 
 			if (is_mode_switch_request)
@@ -191,8 +191,8 @@ namespace Frida.Fruity {
 			return response;
 		}
 
-		private PropertyList create_request (string message_type) {
-			var request = new PropertyList ();
+		private Plist create_request (string message_type) {
+			var request = new Plist ();
 			request.set_string ("ClientVersionString", "usbmuxd-423.50.204");
 			request.set_string ("ProgName", "Xcode");
 			request.set_string ("BundleID", "com.apple.dt.Xcode");
@@ -221,7 +221,7 @@ namespace Frida.Fruity {
 
 			unowned string body_xml = (string) msg.body;
 			try {
-				var body = new PropertyList.from_xml (body_xml);
+				var body = new Plist.from_xml (body_xml);
 				if (msg.tag != 0) {
 					handle_response_message (msg.tag, body);
 				} else {
@@ -240,12 +240,12 @@ namespace Frida.Fruity {
 						throw new UsbmuxError.PROTOCOL ("Unexpected message type: %s", message_type);
 					}
 				}
-			} catch (PropertyListError e) {
+			} catch (PlistError e) {
 				throw new UsbmuxError.PROTOCOL ("Malformed usbmux message body: %s", e.message);
 			}
 		}
 
-		private void handle_response_message (uint32 tag, PropertyList response) throws UsbmuxError {
+		private void handle_response_message (uint32 tag, Plist response) throws UsbmuxError {
 			PendingResponse match = null;
 			foreach (var pending in pending_responses) {
 				if (pending.tag == tag) {
@@ -263,7 +263,7 @@ namespace Frida.Fruity {
 				int result;
 				try {
 					result = response.get_int ("Number");
-				} catch (PropertyListError e) {
+				} catch (PlistError e) {
 					throw new UsbmuxError.PROTOCOL ("Malformed response: %s", e.message);
 				}
 				if (result == ResultCode.SUCCESS)
@@ -381,7 +381,7 @@ namespace Frida.Fruity {
 			public delegate void CompletionHandler ();
 			private CompletionHandler handler;
 
-			public PropertyList? response {
+			public Plist? response {
 				get;
 				private set;
 			}
@@ -396,7 +396,7 @@ namespace Frida.Fruity {
 				this.handler = (owned) handler;
 			}
 
-			public void complete_with_response (PropertyList? response) {
+			public void complete_with_response (Plist? response) {
 				this.response = response;
 				handler ();
 			}

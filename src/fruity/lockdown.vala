@@ -6,7 +6,7 @@ namespace Frida.Fruity {
 		}
 
 		private UsbmuxClient transport;
-		private PropertyRpcClient client;
+		private PlistServiceClient client;
 
 		private const uint LOCKDOWN_PORT = 62078;
 
@@ -37,7 +37,7 @@ namespace Frida.Fruity {
 
 				yield transport.connect_to_port (device.id, LOCKDOWN_PORT);
 
-				client = new PropertyRpcClient (transport.connection);
+				client = new PlistServiceClient (transport.connection);
 				client.open ();
 
 				var type = yield query_type ();
@@ -74,9 +74,9 @@ namespace Frida.Fruity {
 				var service_transport = yield UsbmuxClient.open ();
 				yield service_transport.connect_to_port (device_details.id, response.get_int ("Port"));
 				return service_transport;
-			} catch (PropertyRpcError e) {
+			} catch (PlistServiceError e) {
 				throw error_from_rpc (e);
-			} catch (PropertyListError e) {
+			} catch (PlistError e) {
 				throw response_error_from_property_list (e);
 			} catch (UsbmuxError e) {
 				throw new LockdownError.FAILED ("%s", e.message);
@@ -88,19 +88,19 @@ namespace Frida.Fruity {
 				var response = yield client.query (client.create_request ("QueryType"));
 
 				return response.get_string ("Type");
-			} catch (PropertyRpcError e) {
+			} catch (PlistServiceError e) {
 				throw error_from_rpc (e);
-			} catch (PropertyListError e) {
+			} catch (PlistError e) {
 				throw response_error_from_property_list (e);
 			}
 		}
 
-		private async void start_session (PropertyList pair_record) throws LockdownError {
+		private async void start_session (Plist pair_record) throws LockdownError {
 			string host_id, system_buid;
 			try {
 				host_id = pair_record.get_string ("HostID");
 				system_buid = pair_record.get_string ("SystemBUID");
-			} catch (PropertyListError e) {
+			} catch (PlistError e) {
 				throw new LockdownError.FAILED ("Invalid pair record: %s", e.message);
 			}
 
@@ -115,20 +115,20 @@ namespace Frida.Fruity {
 
 				if (response.get_boolean ("EnableSessionSSL"))
 					yield client.enable_encryption (pair_record);
-			} catch (PropertyRpcError e) {
+			} catch (PlistServiceError e) {
 				throw error_from_rpc (e);
-			} catch (PropertyListError e) {
+			} catch (PlistError e) {
 				throw response_error_from_property_list (e);
 			}
 		}
 
-		private LockdownError error_from_rpc (PropertyRpcError e) {
-			if (e is PropertyRpcError.CONNECTION_CLOSED)
+		private LockdownError error_from_rpc (PlistServiceError e) {
+			if (e is PlistServiceError.CONNECTION_CLOSED)
 				return new LockdownError.CONNECTION_CLOSED ("%s", e.message);
 			return new LockdownError.FAILED ("%s", e.message);
 		}
 
-		private LockdownError response_error_from_property_list (PropertyListError e) {
+		private LockdownError response_error_from_property_list (PlistError e) {
 			return new LockdownError.PROTOCOL ("Unexpected response: %s", e.message);
 		}
 	}
