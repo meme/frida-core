@@ -227,7 +227,7 @@ namespace Frida.Fruity {
 				} else {
 					var message_type = body.get_string ("MessageType");
 					if (message_type == "Attached") {
-						var props = body.get_plist ("Properties");
+						var props = body.get_dict ("Properties");
 						var details = new DeviceDetails (
 							DeviceId ((uint) body.get_int ("DeviceID")),
 							ProductId (props.get_int ("ProductID")),

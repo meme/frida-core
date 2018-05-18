@@ -2647,19 +2647,18 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 					assert (plist.get_int ("DeviceID") == 2);
 					assert (plist.get_string ("MessageType") == "Attached");
 
-					var proplist = plist.get_plist ("Properties");
-					var proplist_keys = proplist.get_keys ();
-					assert (proplist_keys.length == 8);
-					assert (proplist.get_string ("ConnectionType") == "USB");
-					assert (proplist.get_int ("DeviceID") == 2);
-					assert (proplist.get_int ("LocationID") == 0);
-					assert (proplist.get_int ("ProductID") == 4759);
-					assert (proplist.get_string ("SerialNumber") == "220f889780dda462091a65df48b9b6aedb05490f");
+					var properties = plist.get_dict ("Properties");
+					assert (properties.get_keys ().length == 8);
+					assert (properties.get_string ("ConnectionType") == "USB");
+					assert (properties.get_int ("DeviceID") == 2);
+					assert (properties.get_int ("LocationID") == 0);
+					assert (properties.get_int ("ProductID") == 4759);
+					assert (properties.get_string ("SerialNumber") == "220f889780dda462091a65df48b9b6aedb05490f");
 
-					assert (proplist.get_boolean ("ExtraBoolTrue") == true);
-					assert (proplist.get_boolean ("ExtraBoolFalse") == false);
+					assert (properties.get_boolean ("ExtraBoolTrue") == true);
+					assert (properties.get_boolean ("ExtraBoolFalse") == false);
 
-					var extra_data = proplist.get_bytes ("ExtraData");
+					var extra_data = properties.get_bytes ("ExtraData");
 					assert (extra_data.length == 3);
 					assert (extra_data[0] == 0x01);
 					assert (extra_data[1] == 0x02);
@@ -2674,13 +2673,13 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 				plist.set_string ("MessageType", "Detached");
 				plist.set_int ("DeviceID", 2);
 
-				var proplist = new Frida.Fruity.Plist ();
-				proplist.set_string ("ConnectionType", "USB");
-				proplist.set_int ("DeviceID", 2);
-				proplist.set_boolean ("ExtraBoolTrue", true);
-				proplist.set_boolean ("ExtraBoolFalse", false);
-				proplist.set_bytes ("ExtraData", new Bytes ({ 0x01, 0x02, 0x03 }));
-				plist.set_plist ("Properties", proplist);
+				var properties = new Frida.Fruity.Dict ();
+				properties.set_string ("ConnectionType", "USB");
+				properties.set_int ("DeviceID", 2);
+				properties.set_boolean ("ExtraBoolTrue", true);
+				properties.set_boolean ("ExtraBoolFalse", false);
+				properties.set_bytes ("ExtraData", new Bytes ({ 0x01, 0x02, 0x03 }));
+				plist.set_dict ("Properties", properties);
 
 				var actual_xml = plist.to_xml ();
 				var expected_xml =

@@ -1,7 +1,5 @@
 namespace Frida.Fruity {
-	public class Plist : Object {
-		private Gee.HashMap<string, Value?> value_by_key = new Gee.HashMap<string, Value?> ();
-
+	public class Plist : Dict {
 		public Plist.from_xml (string xml) throws PlistError {
 			try {
 				var parser = new XmlParser (this);
@@ -14,95 +12,8 @@ namespace Frida.Fruity {
 		public string to_xml () {
 			var builder = new StringBuilder ();
 			var writer = new XmlWriter (builder);
-			writer.write (this);
+			writer.write_plist (this);
 			return builder.str;
-		}
-
-		public string[] get_keys () {
-			return value_by_key.keys.to_array ();
-		}
-
-		public bool has_key (string key) {
-			return value_by_key.has_key (key);
-		}
-
-		public bool get_boolean (string key) throws PlistError {
-			return get_value (key, typeof (bool)).get_boolean ();
-		}
-
-		public void set_boolean (string key, bool val) {
-			var gval = Value (typeof (bool));
-			gval.set_boolean (val);
-			set_value (key, gval);
-		}
-
-		public int get_int (string key) throws PlistError {
-			return get_value (key, typeof (int)).get_int ();
-		}
-
-		public void set_int (string key, int val) {
-			var gval = Value (typeof (int));
-			gval.set_int (val);
-			set_value (key, gval);
-		}
-
-		public uint get_uint (string key) throws PlistError {
-			return get_value (key, typeof (uint)).get_uint ();
-		}
-
-		public void set_uint (string key, uint val) {
-			var gval = Value (typeof (uint));
-			gval.set_uint (val);
-			set_value (key, gval);
-		}
-
-		public string get_string (string key) throws PlistError {
-			return get_value (key, typeof (string)).get_string ();
-		}
-
-		public void set_string (string key, string str) {
-			var gval = Value (typeof (string));
-			gval.set_string (str);
-			set_value (key, gval);
-		}
-
-		public unowned Bytes get_bytes (string key) throws PlistError {
-			return (Bytes) get_value (key, typeof (Bytes)).get_boxed ();
-		}
-
-		public string get_bytes_as_string (string key) throws PlistError {
-			var bytes = get_bytes (key);
-			unowned string unterminated_str = (string) bytes.get_data ();
-			return unterminated_str[0:bytes.length];
-		}
-
-		public void set_bytes (string key, Bytes val) {
-			var gval = Value (typeof (Bytes));
-			gval.set_boxed (val);
-			set_value (key, gval);
-		}
-
-		public Plist get_plist (string key) throws PlistError {
-			return get_value (key, typeof (Plist)).get_object () as Plist;
-		}
-
-		public void set_plist (string key, Plist plist) {
-			var gval = Value (typeof (Plist));
-			gval.set_object (plist);
-			set_value (key, gval);
-		}
-
-		private Value get_value (string key, Type expected_type = Type.INVALID) throws PlistError {
-			var val = value_by_key[key];
-			if (val == null)
-				throw new PlistError.KEY_NOT_FOUND ("Property list key '%s' does not exist".printf (key));
-			if (expected_type != Type.INVALID && !val.holds (expected_type))
-				throw new PlistError.TYPE_MISMATCH ("Property list key '%s' does not have the expected type".printf (key));
-			return val;
-		}
-
-		private void set_value (string key, Value val) {
-			value_by_key[key] = val;
 		}
 
 		private class XmlParser : Object {
@@ -119,7 +30,7 @@ namespace Frida.Fruity {
 				null
 			};
 
-			private Gee.Deque<Plist> stack;
+			private Gee.Deque<Dict> stack;
 			private KeyValuePair current_pair;
 
 			public XmlParser (Plist plist) {
@@ -152,13 +63,13 @@ namespace Frida.Fruity {
 					current_pair.type = element_name;
 
 					if (current_pair.type == "dict") {
-						var parent_plist = stack.peek ();
+						var parent = stack.peek ();
 
-						var child_plist = new Plist ();
-						stack.offer_head (child_plist);
-						var child_plist_value = Value (typeof (Plist));
-						child_plist_value.set_object (child_plist);
-						parent_plist.set_value (current_pair.key, child_plist_value);
+						var dict = new Dict ();
+						stack.offer_head (dict);
+						var dict_value = Value (typeof (Dict));
+						dict_value.set_object (dict);
+						parent.set_value (current_pair.key, dict_value);
 
 						current_pair = null;
 					}
@@ -226,18 +137,22 @@ namespace Frida.Fruity {
 				this.builder = builder;
 			}
 
-			public void write (Plist plist) {
-				if (level == 0) {
-					write_line ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
-					write_line ("<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/Plist-1.0.dtd\">");
-					write_line ("<plist version=\"1.0\">");
-				}
+			public void write_plist (Plist plist) {
+				write_line ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+				write_line ("<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">");
+				write_line ("<plist version=\"1.0\">");
 
+				write_dict (plist);
+
+				write_line ("</plist>");
+			}
+
+			public void write_dict (Dict dict) {
 				write_line ("<dict>");
 				level++;
 
 				var keys = new Gee.ArrayList<string> ();
-				var key_array = plist.get_keys ();
+				var key_array = dict.get_keys ();
 				foreach (var key in key_array)
 					keys.add (key);
 				keys.sort ();
@@ -247,32 +162,34 @@ namespace Frida.Fruity {
 
 					Value val;
 					try {
-						val = plist.get_value (key);
+						val = dict.get_value (key);
 					} catch (PlistError e) {
 						assert_not_reached ();
 					}
-					var type = val.type ();
-					if (type == typeof (bool)) {
-						write_tag (val.get_boolean ().to_string ());
-					} else if (type == typeof (int)) {
-						write_tag ("integer", val.get_int ().to_string ());
-					} else if (type == typeof (uint)) {
-						write_tag ("integer", val.get_uint ().to_string ());
-					} else if (type == typeof (string)) {
-						write_tag ("string", val.get_string ());
-					} else if (type == typeof (Bytes)) {
-						unowned Bytes bytes = (Bytes) val.get_boxed ();
-						write_tag ("data", Base64.encode (bytes.get_data ()));
-					} else if (type == typeof (Plist)) {
-						write (val.get_object () as Plist);
-					}
+
+					write_value (val);
 				}
 
 				level--;
 				write_line ("</dict>");
+			}
 
-				if (level == 0)
-					write_line ("</plist>");
+			public void write_value (Value val) {
+				var type = val.type ();
+				if (type == typeof (bool)) {
+					write_tag (val.get_boolean ().to_string ());
+				} else if (type == typeof (int)) {
+					write_tag ("integer", val.get_int ().to_string ());
+				} else if (type == typeof (uint)) {
+					write_tag ("integer", val.get_uint ().to_string ());
+				} else if (type == typeof (string)) {
+					write_tag ("string", Markup.escape_text (val.get_string ()));
+				} else if (type == typeof (Bytes)) {
+					unowned Bytes bytes = (Bytes) val.get_boxed ();
+					write_tag ("data", Base64.encode (bytes.get_data ()));
+				} else if (type == typeof (Dict)) {
+					write_dict (val.get_object () as Dict);
+				}
 			}
 
 			private void write_tag (string name, string? content = null) {
@@ -288,6 +205,97 @@ namespace Frida.Fruity {
 				builder.append (line);
 				builder.append ("\n");
 			}
+		}
+	}
+
+	public class Dict : Object {
+		private Gee.HashMap<string, Value?> storage = new Gee.HashMap<string, Value?> ();
+
+		public string[] get_keys () {
+			return storage.keys.to_array ();
+		}
+
+		public bool has_key (string key) {
+			return storage.has_key (key);
+		}
+
+		public bool get_boolean (string key) throws PlistError {
+			return get_value (key, typeof (bool)).get_boolean ();
+		}
+
+		public void set_boolean (string key, bool val) {
+			var gval = Value (typeof (bool));
+			gval.set_boolean (val);
+			set_value (key, gval);
+		}
+
+		public int get_int (string key) throws PlistError {
+			return get_value (key, typeof (int)).get_int ();
+		}
+
+		public void set_int (string key, int val) {
+			var gval = Value (typeof (int));
+			gval.set_int (val);
+			set_value (key, gval);
+		}
+
+		public uint get_uint (string key) throws PlistError {
+			return get_value (key, typeof (uint)).get_uint ();
+		}
+
+		public void set_uint (string key, uint val) {
+			var gval = Value (typeof (uint));
+			gval.set_uint (val);
+			set_value (key, gval);
+		}
+
+		public string get_string (string key) throws PlistError {
+			return get_value (key, typeof (string)).get_string ();
+		}
+
+		public void set_string (string key, string str) {
+			var gval = Value (typeof (string));
+			gval.set_string (str);
+			set_value (key, gval);
+		}
+
+		public unowned Bytes get_bytes (string key) throws PlistError {
+			return (Bytes) get_value (key, typeof (Bytes)).get_boxed ();
+		}
+
+		public string get_bytes_as_string (string key) throws PlistError {
+			var bytes = get_bytes (key);
+			unowned string unterminated_str = (string) bytes.get_data ();
+			return unterminated_str[0:bytes.length];
+		}
+
+		public void set_bytes (string key, Bytes val) {
+			var gval = Value (typeof (Bytes));
+			gval.set_boxed (val);
+			set_value (key, gval);
+		}
+
+		public Dict get_dict (string key) throws PlistError {
+			return get_value (key, typeof (Dict)).get_object () as Dict;
+		}
+
+		public void set_dict (string key, Dict dict) {
+			var gval = Value (typeof (Dict));
+			gval.set_object (dict);
+			set_value (key, gval);
+		}
+
+		public Value get_value (string key, GLib.Type expected_type = GLib.Type.INVALID) throws PlistError {
+			var val = storage[key];
+			if (val == null)
+				throw new PlistError.KEY_NOT_FOUND ("Property list key '%s' does not exist".printf (key));
+			if (expected_type != Type.INVALID && !val.holds (expected_type))
+				throw new PlistError.TYPE_MISMATCH ("Property list key '%s' does not have the expected type".printf (key));
+			return val;
+		}
+
+		protected void set_value (string key, Value val) {
+			storage[key] = val;
 		}
 	}
 
