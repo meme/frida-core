@@ -9,8 +9,7 @@ namespace Frida.Fruity {
 		private OutputStream output;
 		private Cancellable cancellable = new Cancellable ();
 
-		private bool is_processing_messages;
-		private Gee.ArrayQueue<PendingResponse> pending_responses = new Gee.ArrayQueue<PendingResponse> ();
+		private Gee.ArrayQueue<PendingQuery> pending_queries = new Gee.ArrayQueue<PendingQuery> ();
 
 		private const uint32 MAX_MESSAGE_SIZE = 128 * 1024;
 
@@ -23,16 +22,7 @@ namespace Frida.Fruity {
 			output = stream.get_output_stream ();
 		}
 
-		public void open () {
-			is_processing_messages = true;
-			process_incoming_messages.begin ();
-		}
-
 		public async void close () {
-			if (!is_processing_messages)
-				return;
-			is_processing_messages = false;
-
 			cancellable.cancel ();
 
 			var source = new IdleSource ();
@@ -45,16 +35,65 @@ namespace Frida.Fruity {
 			yield;
 		}
 
-		public async void enable_encryption (Plist pair_record) throws PlistServiceError {
-			is_processing_messages = false;
+		public Plist create_request (string request_type) {
+			var request = new Plist ();
+			request.set_string ("Request", request_type);
+			request.set_string ("Label", "Xcode");
+			request.set_string ("ProtocolVersion", "2");
+			return request;
+		}
 
-			var source = new IdleSource ();
-			source.set_callback (() => {
-				enable_encryption.callback ();
-				return false;
+		public async Plist query (Plist request) throws PlistServiceError {
+			var reader = yield begin_query (request);
+			var response = yield reader.read ();
+			reader.end ();
+			return response;
+		}
+
+		public async PlistResponseReader begin_query (Plist request) throws PlistServiceError {
+			bool written = false;
+			bool waiting = false;
+
+			var query = new PendingQuery (this, request);
+			var written_handler = query.written.connect (() => {
+				written = true;
+				if (waiting)
+					begin_query.callback ();
 			});
-			source.attach (MainContext.get_thread_default ());
-			yield;
+			query.ended.connect (on_query_ended);
+
+			on_query_created (query);
+
+			if (!written) {
+				waiting = true;
+				yield;
+				waiting = false;
+			}
+
+			query.disconnect (written_handler);
+
+			return query;
+		}
+
+		private void on_query_created (PendingQuery query) {
+			if (pending_queries.is_empty)
+				query.write.begin ();
+
+			pending_queries.offer_tail (query);
+		}
+
+		private void on_query_ended (PendingQuery query) {
+			pending_queries.poll_head ();
+
+			query.ended.disconnect (on_query_ended);
+
+			var next_query = pending_queries.peek_head ();
+			if (next_query != null)
+				next_query.write.begin ();
+		}
+
+		public async void enable_encryption (Plist pair_record) throws PlistServiceError {
+			assert (pending_queries.is_empty);
 
 			try {
 				var connection = TlsClientConnection.new (stream, null);
@@ -70,9 +109,6 @@ namespace Frida.Fruity {
 				this.tls_connection = connection;
 				this.input = connection.get_input_stream ();
 				this.output = connection.get_output_stream ();
-
-				is_processing_messages = true;
-				process_incoming_messages.begin ();
 			} catch (GLib.Error e) {
 				throw new PlistServiceError.FAILED ("%s", e.message);
 			}
@@ -80,48 +116,6 @@ namespace Frida.Fruity {
 
 		private bool on_accept_certificate (TlsCertificate peer_cert, TlsCertificateFlags errors) {
 			return true;
-		}
-
-		public async Plist query (Plist request) throws PlistServiceError {
-			var msg = create_message (request);
-
-			var pending = new PendingResponse (() => query.callback ());
-			pending_responses.offer_tail (pending);
-			write_message.begin (msg);
-			yield;
-
-			var response = pending.response;
-			if (response == null)
-				throw pending.error;
-
-			return response;
-		}
-
-		public Plist create_request (string request_type) {
-			var request = new Plist ();
-			request.set_string ("Request", request_type);
-			request.set_string ("Label", "Xcode");
-			request.set_string ("ProtocolVersion", "2");
-			return request;
-		}
-
-		private async void process_incoming_messages () {
-			while (is_processing_messages) {
-				try {
-					var msg = yield read_message ();
-					handle_response_message (msg);
-				} catch (PlistServiceError e) {
-					foreach (var pending_response in pending_responses)
-						pending_response.complete_with_error (e);
-				}
-			}
-		}
-
-		private void handle_response_message (Plist response) throws PlistServiceError {
-			var pending = pending_responses.poll_head ();
-			if (pending == null)
-				throw new PlistServiceError.PROTOCOL ("Unexpected reply");
-			pending.complete_with_response (response);
 		}
 
 		private async Plist read_message () throws PlistServiceError {
@@ -155,13 +149,8 @@ namespace Frida.Fruity {
 				throw new PlistServiceError.CONNECTION_CLOSED ("Connection closed");
 		}
 
-		private async void write_message (uint8[] blob) throws GLib.Error {
-			size_t bytes_written;
-			yield output.write_all_async (blob, Priority.DEFAULT, cancellable, out bytes_written);
-		}
-
-		private uint8[] create_message (Plist request) {
-			var xml = request.to_xml ();
+		private async void write_message (Plist message) throws PlistServiceError {
+			var xml = message.to_xml ();
 			unowned uint8[] body = ((uint8[]) xml)[0:xml.length];
 
 			uint8[] blob = new uint8[4 + body.length];
@@ -172,37 +161,58 @@ namespace Frida.Fruity {
 			uint8 * blob_start = (void *) blob;
 			Memory.copy (blob_start + 4, body, body.length);
 
-			return blob;
-		}
-
-		private class PendingResponse {
-			public delegate void CompletionHandler ();
-			private CompletionHandler handler;
-
-			public Plist? response {
-				get;
-				private set;
-			}
-
-			public PlistServiceError? error {
-				get;
-				private set;
-			}
-
-			public PendingResponse (owned CompletionHandler handler) {
-				this.handler = (owned) handler;
-			}
-
-			public void complete_with_response (Plist? response) {
-				this.response = response;
-				handler ();
-			}
-
-			public void complete_with_error (PlistServiceError? error) {
-				this.error = error;
-				handler ();
+			size_t bytes_written;
+			try {
+				yield output.write_all_async (blob, Priority.DEFAULT, cancellable, out bytes_written);
+			} catch (GLib.Error e) {
+				throw new PlistServiceError.CONNECTION_CLOSED ("%s", e.message);
 			}
 		}
+
+		private class PendingQuery : Object, PlistResponseReader {
+			public signal void written ();
+			public signal void ended ();
+
+			public weak PlistServiceClient client {
+				get;
+				construct;
+			}
+
+			public Plist request {
+				get;
+				construct;
+			}
+
+			public PendingQuery (PlistServiceClient client, Plist request) {
+				Object (
+					client: client,
+					request: request
+				);
+			}
+
+			public async void write () {
+				try {
+					yield client.write_message (request);
+				} catch (PlistServiceError e) {
+					// Safe to assume that read() is going to fail
+				} finally {
+					written ();
+				}
+			}
+
+			private async Plist read () throws PlistServiceError {
+				return yield client.read_message ();
+			}
+
+			private void end () {
+				ended ();
+			}
+		}
+	}
+
+	public interface PlistResponseReader : Object {
+		public abstract async Plist read () throws PlistServiceError;
+		public abstract void end ();
 	}
 
 	public errordomain PlistServiceError {

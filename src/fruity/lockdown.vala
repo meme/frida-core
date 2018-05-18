@@ -38,7 +38,6 @@ namespace Frida.Fruity {
 				yield transport.connect_to_port (device.id, LOCKDOWN_PORT);
 
 				client = new PlistServiceClient (transport.connection);
-				client.open ();
 
 				var type = yield query_type ();
 				printerr ("type: %s\n", type);
