@@ -26,21 +26,25 @@ namespace Frida.Fruity {
 			cancellable.cancel ();
 
 			var source = new IdleSource ();
-			source.set_priority (Priority.LOW);
 			source.set_callback (() => {
 				close.callback ();
 				return false;
 			});
 			source.attach (MainContext.get_thread_default ());
 			yield;
-		}
 
-		public Plist create_request (string request_type) {
-			var request = new Plist ();
-			request.set_string ("Request", request_type);
-			request.set_string ("Label", "Xcode");
-			request.set_string ("ProtocolVersion", "2");
-			return request;
+			if (tls_connection != null) {
+				try {
+					yield tls_connection.close_async ();
+				} catch (GLib.IOError e) {
+				}
+				tls_connection = null;
+			}
+
+			try {
+				yield stream.close_async ();
+			} catch (GLib.IOError e) {
+			}
 		}
 
 		public async Plist query (Plist request) throws PlistServiceError {
@@ -201,7 +205,12 @@ namespace Frida.Fruity {
 			}
 
 			private async Plist read () throws PlistServiceError {
-				return yield client.read_message ();
+				try {
+					return yield client.read_message ();
+				} catch (PlistServiceError e) {
+					end ();
+					throw e;
+				}
 			}
 
 			private void end () {

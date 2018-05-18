@@ -49,10 +49,20 @@ namespace Frida {
 
 		public async HostSession create (string? location = null) throws Error {
 			try {
-				var session = yield Fruity.LockdownSession.open (device_details);
-				yield session.start_service ("com.apple.mobile.installation_proxy");
-				yield session.close ();
+				var lockdown = yield Fruity.LockdownClient.open (device_details);
+				try {
+					var installation_proxy = yield Fruity.InstallationProxyClient.open (lockdown);
+					var apps = yield installation_proxy.enumerate_applications ();
+					print ("Got %u apps:\n", apps.size);
+					foreach (var app in apps) {
+						printerr ("\t<identifier='%s' name='%s'>\n", app.identifier, app.name);
+					}
+				} finally {
+					yield lockdown.close ();
+				}
 			} catch (Fruity.LockdownError e) {
+				throw new Error.NOT_SUPPORTED ("%s", e.message);
+			} catch (Fruity.InstallationProxyError e) {
 				throw new Error.NOT_SUPPORTED ("%s", e.message);
 			}
 

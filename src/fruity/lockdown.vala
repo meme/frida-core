@@ -1,46 +1,44 @@
 namespace Frida.Fruity {
-	public class LockdownSession : Object, AsyncInitable {
+	public class LockdownClient : Object, AsyncInitable {
 		public DeviceDetails device_details {
 			get;
 			construct;
 		}
 
-		private UsbmuxClient transport;
-		private PlistServiceClient client;
+		private PlistServiceClient service;
 
 		private const uint LOCKDOWN_PORT = 62078;
 
-		private LockdownSession (DeviceDetails device_details) {
+		private LockdownClient (DeviceDetails device_details) {
 			Object (device_details: device_details);
 		}
 
-		public static async LockdownSession open (DeviceDetails device_details, Cancellable? cancellable = null) throws LockdownError {
-			var session = new LockdownSession (device_details);
+		public static async LockdownClient open (DeviceDetails device_details, Cancellable? cancellable = null) throws LockdownError {
+			var client = new LockdownClient (device_details);
 
 			try {
-				yield session.init_async (Priority.DEFAULT, cancellable);
+				yield client.init_async (Priority.DEFAULT, cancellable);
 			} catch (GLib.Error e) {
 				assert (e is LockdownError);
 				throw (LockdownError) e;
 			}
 
-			return session;
+			return client;
 		}
 
 		private async bool init_async (int io_priority, Cancellable? cancellable) throws LockdownError {
 			var device = device_details;
 
 			try {
-				transport = yield UsbmuxClient.open (cancellable);
+				var usbmux = yield UsbmuxClient.open (cancellable);
 
-				var pair_record = yield transport.read_pair_record (device.udid);
+				var pair_record = yield usbmux.read_pair_record (device.udid);
 
-				yield transport.connect_to_port (device.id, LOCKDOWN_PORT);
+				yield usbmux.connect_to_port (device.id, LOCKDOWN_PORT);
 
-				client = new PlistServiceClient (transport.connection);
+				service = new PlistServiceClient (usbmux.connection);
 
-				var type = yield query_type ();
-				printerr ("type: %s\n", type);
+				yield query_type ();
 
 				yield start_session (pair_record);
 			} catch (UsbmuxError e) {
@@ -51,32 +49,24 @@ namespace Frida.Fruity {
 		}
 
 		public async void close () {
-			if (client != null) {
-				yield client.close ();
-				client = null;
-			}
-
-			if (transport != null) {
-				yield transport.close ();
-				transport = null;
-			}
+			yield service.close ();
 		}
 
-		public async UsbmuxClient start_service (string name) throws LockdownError {
+		public async IOStream start_service (string name) throws LockdownError {
 			try {
-				var request = client.create_request ("StartService");
+				var request = create_request ("StartService");
 				request.set_string ("Service", name);
 
-				var response = yield client.query (request);
-				printerr ("response: %s\n", response.to_xml ());
+				var response = yield service.query (request);
 
 				var service_transport = yield UsbmuxClient.open ();
 				yield service_transport.connect_to_port (device_details.id, response.get_int ("Port"));
-				return service_transport;
+
+				return service_transport.connection;
 			} catch (PlistServiceError e) {
-				throw error_from_rpc (e);
+				throw error_from_service (e);
 			} catch (PlistError e) {
-				throw response_error_from_property_list (e);
+				throw error_from_plist (e);
 			} catch (UsbmuxError e) {
 				throw new LockdownError.FAILED ("%s", e.message);
 			}
@@ -84,13 +74,13 @@ namespace Frida.Fruity {
 
 		private async string query_type () throws LockdownError {
 			try {
-				var response = yield client.query (client.create_request ("QueryType"));
+				var response = yield service.query (create_request ("QueryType"));
 
 				return response.get_string ("Type");
 			} catch (PlistServiceError e) {
-				throw error_from_rpc (e);
+				throw error_from_service (e);
 			} catch (PlistError e) {
-				throw response_error_from_property_list (e);
+				throw error_from_plist (e);
 			}
 		}
 
@@ -104,30 +94,38 @@ namespace Frida.Fruity {
 			}
 
 			try {
-				var request = client.create_request ("StartSession");
+				var request = create_request ("StartSession");
 				request.set_string ("HostID", host_id);
 				request.set_string ("SystemBUID", system_buid);
 
-				var response = yield client.query (request);
+				var response = yield service.query (request);
 				if (response.has_key ("Error"))
 					throw new LockdownError.FAILED ("Unexpected response: %s", response.get_string ("Error"));
 
 				if (response.get_boolean ("EnableSessionSSL"))
-					yield client.enable_encryption (pair_record);
+					yield service.enable_encryption (pair_record);
 			} catch (PlistServiceError e) {
-				throw error_from_rpc (e);
+				throw error_from_service (e);
 			} catch (PlistError e) {
-				throw response_error_from_property_list (e);
+				throw error_from_plist (e);
 			}
 		}
 
-		private LockdownError error_from_rpc (PlistServiceError e) {
+		private Plist create_request (string request_type) {
+			var request = new Plist ();
+			request.set_string ("Request", request_type);
+			request.set_string ("Label", "Xcode");
+			request.set_string ("ProtocolVersion", "2");
+			return request;
+		}
+
+		private LockdownError error_from_service (PlistServiceError e) {
 			if (e is PlistServiceError.CONNECTION_CLOSED)
 				return new LockdownError.CONNECTION_CLOSED ("%s", e.message);
 			return new LockdownError.FAILED ("%s", e.message);
 		}
 
-		private LockdownError response_error_from_property_list (PlistError e) {
+		private LockdownError error_from_plist (PlistError e) {
 			return new LockdownError.PROTOCOL ("Unexpected response: %s", e.message);
 		}
 	}
