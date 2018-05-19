@@ -1,5 +1,5 @@
 namespace Frida.Fruity {
-	public class Plist : Dict {
+	public class Plist : PlistDict {
 		public Plist.from_xml (string xml) throws PlistError {
 			try {
 				var parser = new XmlParser (this);
@@ -30,102 +30,225 @@ namespace Frida.Fruity {
 				null
 			};
 
-			private Gee.Deque<Dict> stack;
-			private KeyValuePair current_pair;
+			private Gee.Deque<PartialValue> stack = new Gee.LinkedList<PartialValue> ();
 
 			public XmlParser (Plist plist) {
 				Object (plist: plist);
 			}
 
 			public void parse (string xml) throws MarkupError {
-				stack = new Gee.LinkedList<Plist> ();
-				current_pair = null;
-
 				var context = new MarkupParseContext (parser, 0, this, null);
 				context.parse (xml, -1);
-
-				stack = null;
-				current_pair = null;
 			}
 
 			private void on_start_element (MarkupParseContext context, string element_name, string[] attribute_names, string[] attribute_values) throws MarkupError {
-				if (stack.is_empty) {
+				var partial = stack.peek_head ();
+				if (partial == null) {
 					if (element_name == "dict")
-						stack.offer_head (plist);
-					return;
-				} else if (current_pair == null) {
-					if (element_name == "key")
-						current_pair = new KeyValuePair ();
+						stack.offer_head (new PartialValue.with_dict (plist));
 					return;
 				}
 
-				if (current_pair.type == null) {
-					current_pair.type = element_name;
+				switch (partial.need) {
+					case DICT_KEY_START:
+						if (element_name == "key")
+							partial.need = DICT_KEY_TEXT;
+						return;
 
-					if (current_pair.type == "dict") {
-						var parent = stack.peek ();
+					case DICT_VALUE_START:
+						partial.type = element_name;
+						partial.val = null;
 
-						var dict = new Dict ();
-						stack.offer_head (dict);
-						var dict_value = Value (typeof (Dict));
-						dict_value.set_object (dict);
-						parent.set_value (current_pair.key, dict_value);
+						if (element_name == "dict") {
+							stack.offer_head (new PartialValue.with_dict (new PlistDict ()));
+							partial.need = DICT_VALUE_END;
+							return;
+						}
 
-						current_pair = null;
-					}
+						if (element_name == "array") {
+							stack.offer_head (new PartialValue.with_array (new PlistArray ()));
+							partial.need = DICT_VALUE_END;
+							return;
+						}
+
+						partial.need = DICT_VALUE_TEXT_OR_END;
+
+						return;
+
+					case ARRAY_VALUE_START:
+						partial.type = element_name;
+						partial.val = null;
+
+						if (element_name == "dict") {
+							stack.offer_head (new PartialValue.with_dict (new PlistDict ()));
+							partial.need = ARRAY_VALUE_END;
+							return;
+						}
+
+						if (element_name == "array") {
+							stack.offer_head (new PartialValue.with_array (new PlistArray ()));
+							partial.need = ARRAY_VALUE_END;
+							return;
+						}
+
+						partial.need = ARRAY_VALUE_TEXT_OR_END;
+
+						return;
 				}
 			}
 
 			private void on_end_element (MarkupParseContext context, string element_name) throws MarkupError {
-				if (element_name == "dict")
-					stack.poll ();
-			}
-
-			private void on_text (MarkupParseContext context, string text, size_t text_len) throws MarkupError {
-				if (current_pair == null)
+				var partial = stack.peek_head ();
+				if (partial == null)
 					return;
 
-				if (current_pair.key == null) {
-					current_pair.key = text;
-				} else if (current_pair.type != null) {
-					current_pair.val = text;
+				switch (partial.need) {
+					case DICT_KEY_START:
+						if (element_name == "dict") {
+							stack.poll_head ();
 
-					var val = current_pair.to_value ();
-					if (val != null) {
-						var current_plist = stack.peek ();
-						current_plist.set_value (current_pair.key, val);
+							var parent = stack.peek_head ();
+							if (parent == null)
+								return;
+
+							switch (parent.need) {
+								case DICT_VALUE_END:
+									parent.dict.set_dict (parent.key, partial.dict);
+									parent.need = DICT_KEY_START;
+									break;
+
+								case ARRAY_VALUE_END:
+									parent.array.add_value (partial.dict);
+									parent.need = ARRAY_VALUE_START;
+									break;
+							}
+						}
+
+						return;
+
+					case ARRAY_VALUE_START:
+						if (element_name == "array") {
+							stack.poll_head ();
+
+							var parent = stack.peek_head ();
+							if (parent == null)
+								return;
+
+							switch (parent.need) {
+								case DICT_VALUE_END:
+									parent.dict.set_array (parent.key, partial.array);
+									parent.need = DICT_KEY_START;
+									break;
+
+								case ARRAY_VALUE_END:
+									parent.array.add_value (partial.array);
+									parent.need = ARRAY_VALUE_START;
+									break;
+							}
+						}
+
+						return;
+
+					case DICT_KEY_END:
+						if (element_name == "key")
+							partial.need = DICT_VALUE_START;
+						return;
+
+					case DICT_VALUE_TEXT_OR_END:
+					case DICT_VALUE_END: {
+						var val = try_create_value (partial.type, partial.val);
+						if (val != null)
+							partial.dict.set_value (partial.key, val);
+						partial.need = DICT_KEY_START;
+						return;
 					}
 
-					current_pair = null;
+					case ARRAY_VALUE_TEXT_OR_END:
+					case ARRAY_VALUE_END: {
+						var val = try_create_value (partial.type, partial.val);
+						if (val != null)
+							partial.array.add_value (val);
+						partial.need = ARRAY_VALUE_START;
+						return;
+					}
 				}
 			}
 
-			private class KeyValuePair {
+			private void on_text (MarkupParseContext context, string text, size_t text_len) throws MarkupError {
+				var partial = stack.peek_head ();
+				if (partial == null)
+					return;
+
+				switch (partial.need) {
+					case DICT_KEY_TEXT:
+						partial.key = text;
+						partial.need = DICT_KEY_END;
+						return;
+
+					case DICT_VALUE_TEXT_OR_END:
+						partial.val = text;
+						partial.need = DICT_VALUE_END;
+						return;
+
+					case ARRAY_VALUE_TEXT_OR_END:
+						partial.val = text;
+						partial.need = ARRAY_VALUE_END;
+						return;
+				}
+			}
+
+			private class PartialValue {
+				public enum Need {
+					DICT_KEY_START,
+					DICT_KEY_TEXT,
+					DICT_KEY_END,
+					DICT_VALUE_START,
+					DICT_VALUE_TEXT_OR_END,
+					DICT_VALUE_END,
+					ARRAY_VALUE_START,
+					ARRAY_VALUE_TEXT_OR_END,
+					ARRAY_VALUE_END
+				}
+
+				public PlistDict? dict;
+				public PlistArray? array;
+				public Need need;
 				public string? key;
 				public string? type;
 				public string? val;
 
-				public Value? to_value () {
-					Value? result = null;
-					if (type == "true") {
-						result = Value (typeof (bool));
-						result.set_boolean (true);
-					} else if (type == "false") {
-						result = Value (typeof (bool));
-						result.set_boolean (false);
-					} else if (type == "integer") {
-						result = Value (typeof (int));
-						result.set_int (int.parse (val));
-					} else if (type == "string") {
-						result = Value (typeof (string));
-						result.set_string (val);
-					} else if (type == "data") {
-						result = Value (typeof (Bytes));
-						result.take_boxed (new Bytes.take (Base64.decode (val)));
-					}
-
-					return result;
+				public PartialValue.with_dict (PlistDict dict) {
+					this.dict = dict;
+					this.need = DICT_KEY_START;
 				}
+
+				public PartialValue.with_array (PlistArray array) {
+					this.array = array;
+					this.need = ARRAY_VALUE_START;
+				}
+			}
+
+			public Value? try_create_value (string? type, string? val) {
+				Value? result = null;
+
+				if (type == "true") {
+					result = Value (typeof (bool));
+					result.set_boolean (true);
+				} else if (type == "false") {
+					result = Value (typeof (bool));
+					result.set_boolean (false);
+				} else if (type == "integer") {
+					result = Value (typeof (int));
+					result.set_int (int.parse (val));
+				} else if (type == "string") {
+					result = Value (typeof (string));
+					result.set_string (val);
+				} else if (type == "data") {
+					result = Value (typeof (Bytes));
+					result.take_boxed (new Bytes.take (Base64.decode (val)));
+				}
+
+				return result;
 			}
 		}
 
@@ -147,7 +270,7 @@ namespace Frida.Fruity {
 				write_line ("</plist>");
 			}
 
-			public void write_dict (Dict dict) {
+			public void write_dict (PlistDict dict) {
 				write_line ("<dict>");
 				level++;
 
@@ -187,8 +310,8 @@ namespace Frida.Fruity {
 				} else if (type == typeof (Bytes)) {
 					unowned Bytes bytes = (Bytes) val.get_boxed ();
 					write_tag ("data", Base64.encode (bytes.get_data ()));
-				} else if (type == typeof (Dict)) {
-					write_dict (val.get_object () as Dict);
+				} else if (type == typeof (PlistDict)) {
+					write_dict (val.get_object () as PlistDict);
 				}
 			}
 
@@ -208,8 +331,28 @@ namespace Frida.Fruity {
 		}
 	}
 
-	public class Dict : Object {
+	public class PlistDict : Object {
+		public bool is_empty {
+			get {
+				return storage.is_empty;
+			}
+		}
+
+		public int size {
+			get {
+				return storage.size;
+			}
+		}
+
 		private Gee.HashMap<string, Value?> storage = new Gee.HashMap<string, Value?> ();
+
+		public void clear () {
+			storage.clear ();
+		}
+
+		public void remove (string key) {
+			storage.unset (key);
+		}
 
 		public string[] get_keys () {
 			return storage.keys.to_array ();
@@ -275,33 +418,89 @@ namespace Frida.Fruity {
 			set_value (key, gval);
 		}
 
-		public Dict get_dict (string key) throws PlistError {
-			return get_value (key, typeof (Dict)).get_object () as Dict;
+		public PlistDict get_dict (string key) throws PlistError {
+			return get_value (key, typeof (PlistDict)).get_object () as PlistDict;
 		}
 
-		public void set_dict (string key, Dict dict) {
-			var gval = Value (typeof (Dict));
+		public void set_dict (string key, PlistDict dict) {
+			var gval = Value (typeof (PlistDict));
 			gval.set_object (dict);
+			set_value (key, gval);
+		}
+
+		public PlistArray get_array (string key) throws PlistError {
+			return get_value (key, typeof (PlistArray)).get_object () as PlistArray;
+		}
+
+		public void set_array (string key, PlistArray array) {
+			var gval = Value (typeof (PlistArray));
+			gval.set_object (array);
 			set_value (key, gval);
 		}
 
 		public Value get_value (string key, GLib.Type expected_type = GLib.Type.INVALID) throws PlistError {
 			var val = storage[key];
 			if (val == null)
-				throw new PlistError.KEY_NOT_FOUND ("Property list key '%s' does not exist".printf (key));
+				throw new PlistError.KEY_NOT_FOUND ("Key '%s' does not exist".printf (key));
 			if (expected_type != Type.INVALID && !val.holds (expected_type))
-				throw new PlistError.TYPE_MISMATCH ("Property list key '%s' does not have the expected type".printf (key));
+				throw new PlistError.TYPE_MISMATCH ("Key '%s' does not have the expected type".printf (key));
 			return val;
 		}
 
-		protected void set_value (string key, Value val) {
+		public void set_value (string key, Value val) {
 			storage[key] = val;
+		}
+	}
+
+	public class PlistArray : Object {
+		public bool is_empty {
+			get {
+				return storage.is_empty;
+			}
+		}
+
+		public int length {
+			get {
+				return storage.size;
+			}
+		}
+
+		private Gee.ArrayList<Value?> storage = new Gee.ArrayList<Value?> ();
+
+		public void clear () {
+			storage.clear ();
+		}
+
+		public void remove_at (int index) {
+			storage.remove_at (index);
+		}
+
+		public string get_string (int index) throws PlistError {
+			return get_value (index, typeof (string)).get_string ();
+		}
+
+		public void add_string (string str) {
+			var gval = Value (typeof (string));
+			gval.set_string (str);
+			add_value (gval);
+		}
+
+		public Value get_value (int index, GLib.Type expected_type = GLib.Type.INVALID) throws PlistError {
+			var val = storage[index];
+			if (expected_type != Type.INVALID && !val.holds (expected_type))
+				throw new PlistError.TYPE_MISMATCH ("Array element does not have the expected type");
+			return val;
+		}
+
+		public void add_value (Value val) {
+			storage.add (val);
 		}
 	}
 
 	public errordomain PlistError {
 		INVALID_DATA,
 		KEY_NOT_FOUND,
+		INVALID_INDEX,
 		TYPE_MISMATCH
 	}
 }

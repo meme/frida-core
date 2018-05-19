@@ -2637,6 +2637,11 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 					"		<false/>\n" +
 					"		<key>ExtraData</key>\n" +
 					"		<data>AQID</data>\n" +
+					"		<key>ExtraStrings</key>\n" +
+					"		<array>\n" +
+					"			<string>A</string>\n" +
+					"			<string>B</string>\n" +
+					"		</array>\n" +
 					"	</dict>\n" +
 					"</dict>\n" +
 					"</plist>\n";
@@ -2648,7 +2653,7 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 					assert (plist.get_string ("MessageType") == "Attached");
 
 					var properties = plist.get_dict ("Properties");
-					assert (properties.get_keys ().length == 8);
+					assert (properties.get_keys ().length == 9);
 					assert (properties.get_string ("ConnectionType") == "USB");
 					assert (properties.get_int ("DeviceID") == 2);
 					assert (properties.get_int ("LocationID") == 0);
@@ -2663,7 +2668,13 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 					assert (extra_data[0] == 0x01);
 					assert (extra_data[1] == 0x02);
 					assert (extra_data[2] == 0x03);
+
+					var extra_strings = properties.get_array ("ExtraStrings");
+					assert (extra_strings.length == 2);
+					assert (extra_strings.get_string (0) == "A");
+					assert (extra_strings.get_string (1) == "B");
 				} catch (Frida.Fruity.PlistError e) {
+					printerr ("%s\n", e.message);
 					assert_not_reached ();
 				}
 			}
@@ -2673,7 +2684,7 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 				plist.set_string ("MessageType", "Detached");
 				plist.set_int ("DeviceID", 2);
 
-				var properties = new Frida.Fruity.Dict ();
+				var properties = new Frida.Fruity.PlistDict ();
 				properties.set_string ("ConnectionType", "USB");
 				properties.set_int ("DeviceID", 2);
 				properties.set_boolean ("ExtraBoolTrue", true);

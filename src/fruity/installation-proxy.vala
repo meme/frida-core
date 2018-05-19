@@ -42,7 +42,7 @@ namespace Frida.Fruity {
 
 		public async Gee.ArrayList<ApplicationDetails> enumerate_applications () throws InstallationProxyError {
 			try {
-				var options = new Dict ();
+				var options = new PlistDict ();
 
 				var request = create_request ("Browse");
 				request.set_dict ("ClientOptions", options);
