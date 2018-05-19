@@ -2647,13 +2647,12 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 					"</plist>\n";
 				try {
 					var plist = new Frida.Fruity.Plist.from_xml (xml);
-					var plist_keys = plist.get_keys ();
-					assert (plist_keys.length == 3);
+					assert (plist.size == 3);
 					assert (plist.get_int ("DeviceID") == 2);
 					assert (plist.get_string ("MessageType") == "Attached");
 
 					var properties = plist.get_dict ("Properties");
-					assert (properties.get_keys ().length == 9);
+					assert (properties.size == 9);
 					assert (properties.get_string ("ConnectionType") == "USB");
 					assert (properties.get_int ("DeviceID") == 2);
 					assert (properties.get_int ("LocationID") == 0);
@@ -2690,6 +2689,10 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 				properties.set_boolean ("ExtraBoolTrue", true);
 				properties.set_boolean ("ExtraBoolFalse", false);
 				properties.set_bytes ("ExtraData", new Bytes ({ 0x01, 0x02, 0x03 }));
+				var extra_strings = new Frida.Fruity.PlistArray ();
+				extra_strings.add_string ("A");
+				extra_strings.add_string ("B");
+				properties.set_array ("ExtraStrings", extra_strings);
 				plist.set_dict ("Properties", properties);
 
 				var actual_xml = plist.to_xml ();
@@ -2714,6 +2717,11 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 					"		<true/>\n" +
 					"		<key>ExtraData</key>\n" +
 					"		<data>AQID</data>\n" +
+					"		<key>ExtraStrings</key>\n" +
+					"		<array>\n" +
+					"			<string>A</string>\n" +
+					"			<string>B</string>\n" +
+					"		</array>\n" +
 					"	</dict>\n" +
 					"</dict>\n" +
 					"</plist>\n";

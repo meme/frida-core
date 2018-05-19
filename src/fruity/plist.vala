@@ -275,8 +275,7 @@ namespace Frida.Fruity {
 				level++;
 
 				var keys = new Gee.ArrayList<string> ();
-				var key_array = dict.get_keys ();
-				foreach (var key in key_array)
+				foreach (var key in dict.keys)
 					keys.add (key);
 				keys.sort ();
 
@@ -297,6 +296,17 @@ namespace Frida.Fruity {
 				write_line ("</dict>");
 			}
 
+			public void write_array (PlistArray array) {
+				write_line ("<array>");
+				level++;
+
+				foreach (var val in array.elements)
+					write_value (val);
+
+				level--;
+				write_line ("</array>");
+			}
+
 			public void write_value (Value val) {
 				var type = val.type ();
 				if (type == typeof (bool)) {
@@ -312,6 +322,8 @@ namespace Frida.Fruity {
 					write_tag ("data", Base64.encode (bytes.get_data ()));
 				} else if (type == typeof (PlistDict)) {
 					write_dict (val.get_object () as PlistDict);
+				} else if (type == typeof (PlistArray)) {
+					write_array (val.get_object () as PlistArray);
 				}
 			}
 
@@ -344,6 +356,18 @@ namespace Frida.Fruity {
 			}
 		}
 
+		public Gee.Iterable<string> keys {
+			owned get {
+				return storage.keys;
+			}
+		}
+
+		public Gee.Iterable<Value?> values {
+			owned get {
+				return storage.values;
+			}
+		}
+
 		private Gee.HashMap<string, Value?> storage = new Gee.HashMap<string, Value?> ();
 
 		public void clear () {
@@ -354,11 +378,7 @@ namespace Frida.Fruity {
 			storage.unset (key);
 		}
 
-		public string[] get_keys () {
-			return storage.keys.to_array ();
-		}
-
-		public bool has_key (string key) {
+		public bool has (string key) {
 			return storage.has_key (key);
 		}
 
@@ -392,7 +412,7 @@ namespace Frida.Fruity {
 			set_value (key, gval);
 		}
 
-		public string get_string (string key) throws PlistError {
+		public unowned string get_string (string key) throws PlistError {
 			return get_value (key, typeof (string)).get_string ();
 		}
 
@@ -465,6 +485,12 @@ namespace Frida.Fruity {
 			}
 		}
 
+		public Gee.Iterable<Value?> elements {
+			get {
+				return storage;
+			}
+		}
+
 		private Gee.ArrayList<Value?> storage = new Gee.ArrayList<Value?> ();
 
 		public void clear () {
@@ -475,13 +501,79 @@ namespace Frida.Fruity {
 			storage.remove_at (index);
 		}
 
-		public string get_string (int index) throws PlistError {
+		public bool get_boolean (int index) throws PlistError {
+			return get_value (index, typeof (bool)).get_boolean ();
+		}
+
+		public void add_boolean (bool val) {
+			var gval = Value (typeof (bool));
+			gval.set_boolean (val);
+			add_value (gval);
+		}
+
+		public int get_int (int index) throws PlistError {
+			return get_value (index, typeof (int)).get_int ();
+		}
+
+		public void add_int (int val) {
+			var gval = Value (typeof (int));
+			gval.set_int (val);
+			add_value (gval);
+		}
+
+		public uint get_uint (int index) throws PlistError {
+			return get_value (index, typeof (uint)).get_uint ();
+		}
+
+		public void add_uint (uint val) {
+			var gval = Value (typeof (uint));
+			gval.set_uint (val);
+			add_value (gval);
+		}
+
+		public unowned string get_string (int index) throws PlistError {
 			return get_value (index, typeof (string)).get_string ();
 		}
 
 		public void add_string (string str) {
 			var gval = Value (typeof (string));
 			gval.set_string (str);
+			add_value (gval);
+		}
+
+		public unowned Bytes get_bytes (int index) throws PlistError {
+			return (Bytes) get_value (index, typeof (Bytes)).get_boxed ();
+		}
+
+		public string get_bytes_as_string (int index) throws PlistError {
+			var bytes = get_bytes (index);
+			unowned string unterminated_str = (string) bytes.get_data ();
+			return unterminated_str[0:bytes.length];
+		}
+
+		public void add_bytes (Bytes val) {
+			var gval = Value (typeof (Bytes));
+			gval.set_boxed (val);
+			add_value (gval);
+		}
+
+		public PlistDict get_dict (int index) throws PlistError {
+			return get_value (index, typeof (PlistDict)).get_object () as PlistDict;
+		}
+
+		public void add_dict (PlistDict dict) {
+			var gval = Value (typeof (PlistDict));
+			gval.set_object (dict);
+			add_value (gval);
+		}
+
+		public PlistArray get_array (int index) throws PlistError {
+			return get_value (index, typeof (PlistArray)).get_object () as PlistArray;
+		}
+
+		public void add_array (PlistArray array) {
+			var gval = Value (typeof (PlistArray));
+			gval.set_object (array);
 			add_value (gval);
 		}
 

@@ -99,7 +99,7 @@ namespace Frida.Fruity {
 				request.set_string ("SystemBUID", system_buid);
 
 				var response = yield service.query (request);
-				if (response.has_key ("Error"))
+				if (response.has ("Error"))
 					throw new LockdownError.FAILED ("Unexpected response: %s", response.get_string ("Error"));
 
 				if (response.get_boolean ("EnableSessionSSL"))

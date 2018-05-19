@@ -152,7 +152,7 @@ namespace Frida.Fruity {
 
 			var response = yield query (request);
 			try {
-				if (response.has_key ("MessageType")) {
+				if (response.has ("MessageType")) {
 					if (response.get_string ("MessageType") != "Result")
 						throw new UsbmuxError.PROTOCOL ("Unexpected ReadPairRecord response");
 					var result = response.get_int ("Number");
