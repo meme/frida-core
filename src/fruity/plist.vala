@@ -1,16 +1,13 @@
 namespace Frida.Fruity {
 	public class Plist : PlistDict {
 		public Plist.from_binary (uint8[] data) throws PlistError {
-			throw new PlistError.INVALID_DATA ("Binary plists are not yet supported");
+			var parser = new BinaryParser (this);
+			parser.parse (data);
 		}
 
 		public Plist.from_xml (string xml) throws PlistError {
-			try {
-				var parser = new XmlParser (this);
-				parser.parse (xml);
-			} catch (MarkupError e) {
-				throw new PlistError.INVALID_DATA (e.message);
-			}
+			var parser = new XmlParser (this);
+			parser.parse (xml);
 		}
 
 		public string to_xml () {
@@ -18,6 +15,102 @@ namespace Frida.Fruity {
 			var writer = new XmlWriter (builder);
 			writer.write_plist (this);
 			return builder.str;
+		}
+
+		private class BinaryParser : Object {
+			public Plist plist {
+				get;
+				construct;
+			}
+
+			private DataInputStream input;
+
+			private uint8 offset_size;
+			private uint8 object_ref_size;
+			private uint64 offset_table_offset;
+
+			private uint8 object_info;
+
+			private const uint64 MAX_OBJECT_SIZE = 100 * 1024 * 1024;
+			private const uint64 MAX_OBJECT_COUNT = 32 * 1024;
+
+			public BinaryParser (Plist plist) {
+				Object (plist: plist);
+			}
+
+			public void parse (uint8[] data) throws PlistError {
+				unowned string magic = (string) data;
+				if (!magic.has_prefix ("bplist"))
+					throw new PlistError.INVALID_DATA ("Invalid binary plist");
+
+				try {
+					input = new DataInputStream (new MemoryInputStream.from_bytes (new Bytes.static (data)));
+					input.byte_order = BIG_ENDIAN;
+
+					input.seek (-26, END);
+					offset_size = input.read_byte ();
+					object_ref_size = input.read_byte ();
+					var num_objects = input.read_uint64 ();
+					if (num_objects > MAX_OBJECT_COUNT)
+						throw new PlistError.INVALID_DATA ("Invalid binary plist: too many objects");
+					var top_object_ref = input.read_uint64 ();
+					offset_table_offset = input.read_uint64 ();
+
+					printerr ("offset_size=%u\n", (uint) offset_size);
+					printerr ("object_ref_size=%u\n", (uint) object_ref_size);
+					printerr ("num_objects=%u\n", (uint) num_objects);
+					printerr ("top_object_ref=%u\n", (uint) top_object_ref);
+					printerr ("offset_table_offset=%u\n", (uint) offset_table_offset);
+
+					var top_object = parse_object (top_object_ref);
+				} catch (GLib.Error e) {
+					throw new PlistError.INVALID_DATA ("Invalid binary plist: %s", e.message);
+				}
+			}
+
+			private Value? parse_object (uint64 object_ref) throws GLib.Error {
+				seek_to_object (object_ref);
+
+				uint8 marker = input.read_byte ();
+				uint8 object_type = (marker & 0xf0) >> 4;
+				object_info = marker & 0x0f;
+
+				printerr ("object_type=%u object_info=%u\n", object_type, object_info);
+				switch (object_type) {
+					case 0xd:
+						return parse_dict ();
+
+					default:
+						throw new PlistError.INVALID_DATA ("Unsupported object type: 0x%x\n", object_type);
+				}
+
+				return null;
+			}
+
+			private Value? parse_dict () throws GLib.Error {
+			}
+
+			private void seek_to_object (uint64 object_ref) throws GLib.Error {
+				input.seek ((int64) (offset_table_offset + (object_ref * offset_size)), SET);
+
+				uint64 offset;
+				switch (offset_size) {
+					case 1:
+						offset = input.read_byte ();
+						break;
+					case 2:
+						offset = input.read_uint16 ();
+						break;
+					case 4:
+						offset = input.read_uint32 ();
+						break;
+					default:
+						throw new PlistError.INVALID_DATA ("Unsupported offset size: %u", offset_size);
+				}
+
+				input.seek ((int64) offset, SET);
+			}
+
 		}
 
 		private class XmlParser : Object {
@@ -40,9 +133,13 @@ namespace Frida.Fruity {
 				Object (plist: plist);
 			}
 
-			public void parse (string xml) throws MarkupError {
-				var context = new MarkupParseContext (parser, 0, this, null);
-				context.parse (xml, -1);
+			public void parse (string xml) throws PlistError {
+				try {
+					var context = new MarkupParseContext (parser, 0, this, null);
+					context.parse (xml, -1);
+				} catch (MarkupError e) {
+					throw new PlistError.INVALID_DATA (e.message);
+				}
 			}
 
 			private void on_start_element (MarkupParseContext context, string element_name, string[] attribute_names, string[] attribute_values) throws MarkupError {
