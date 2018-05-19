@@ -132,11 +132,15 @@ namespace Frida.Fruity {
 
 			var body_buf = new uint8[size + 1];
 			body_buf[size] = 0;
-			yield read (body_buf[0:size]);
+			unowned uint8[] body = body_buf[0:size];
+			yield read (body);
 
-			unowned string body_xml = (string) body_buf;
 			try {
-				return new Plist.from_xml (body_xml);
+				unowned string body_str = (string) body_buf;
+				if (body_str.has_prefix ("bplist"))
+					return new Plist.from_binary (body);
+				else
+					return new Plist.from_xml (body_str);
 			} catch (PlistError e) {
 				throw new PlistServiceError.PROTOCOL ("Malformed message: %s", e.message);
 			}

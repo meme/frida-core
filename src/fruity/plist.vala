@@ -1,5 +1,9 @@
 namespace Frida.Fruity {
 	public class Plist : PlistDict {
+		public Plist.from_binary (uint8[] data) throws PlistError {
+			throw new PlistError.INVALID_DATA ("Binary plists are not yet supported");
+		}
+
 		public Plist.from_xml (string xml) throws PlistError {
 			try {
 				var parser = new XmlParser (this);
