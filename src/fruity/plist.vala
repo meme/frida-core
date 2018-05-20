@@ -31,6 +31,8 @@ namespace Frida.Fruity {
 
 			private uint8 object_info;
 
+			private const uint64 EPOCH = 978307200;
+
 			private const uint64 MAX_OBJECT_SIZE = 100 * 1024 * 1024;
 			private const uint64 MAX_OBJECT_COUNT = 32 * 1024;
 
@@ -52,65 +54,323 @@ namespace Frida.Fruity {
 					object_ref_size = input.read_byte ();
 					var num_objects = input.read_uint64 ();
 					if (num_objects > MAX_OBJECT_COUNT)
-						throw new PlistError.INVALID_DATA ("Invalid binary plist: too many objects");
+						throw new PlistError.INVALID_DATA ("Too many objects");
 					var top_object_ref = input.read_uint64 ();
 					offset_table_offset = input.read_uint64 ();
 
-					printerr ("offset_size=%u\n", (uint) offset_size);
-					printerr ("object_ref_size=%u\n", (uint) object_ref_size);
-					printerr ("num_objects=%u\n", (uint) num_objects);
-					printerr ("top_object_ref=%u\n", (uint) top_object_ref);
-					printerr ("offset_table_offset=%u\n", (uint) offset_table_offset);
-
 					var top_object = parse_object (top_object_ref);
+					if (!top_object.holds (typeof (PlistDict)))
+						throw new PlistError.INVALID_DATA ("Toplevel must be a dict");
+					plist.set_all (top_object.get_object () as PlistDict);
 				} catch (GLib.Error e) {
 					throw new PlistError.INVALID_DATA ("Invalid binary plist: %s", e.message);
 				}
 			}
 
 			private Value? parse_object (uint64 object_ref) throws GLib.Error {
-				seek_to_object (object_ref);
+				Value? obj;
 
-				uint8 marker = input.read_byte ();
-				uint8 object_type = (marker & 0xf0) >> 4;
-				object_info = marker & 0x0f;
+				var previous_offset = input.tell ();
+				try {
+					seek_to_object (object_ref);
 
-				printerr ("object_type=%u object_info=%u\n", object_type, object_info);
-				switch (object_type) {
-					case 0xd:
-						return parse_dict ();
-
-					default:
-						throw new PlistError.INVALID_DATA ("Unsupported object type: 0x%x\n", object_type);
+					obj = read_value ();
+				} catch (GLib.Error e) {
+					input.seek (previous_offset, SET);
+					throw e;
 				}
 
-				return null;
-			}
+				input.seek (previous_offset, SET);
 
-			private Value? parse_dict () throws GLib.Error {
+				return obj;
 			}
 
 			private void seek_to_object (uint64 object_ref) throws GLib.Error {
 				input.seek ((int64) (offset_table_offset + (object_ref * offset_size)), SET);
-
-				uint64 offset;
-				switch (offset_size) {
-					case 1:
-						offset = input.read_byte ();
-						break;
-					case 2:
-						offset = input.read_uint16 ();
-						break;
-					case 4:
-						offset = input.read_uint32 ();
-						break;
-					default:
-						throw new PlistError.INVALID_DATA ("Unsupported offset size: %u", offset_size);
-				}
-
+				var offset = read_offset ();
 				input.seek ((int64) offset, SET);
 			}
 
+			private Value? read_value () throws GLib.Error {
+				uint8 marker = input.read_byte ();
+				uint8 object_type = (marker & 0xf0) >> 4;
+				object_info = marker & 0x0f;
+
+				switch (object_type) {
+					case 0x0:
+						return read_constant ();
+					case 0x1:
+						return read_integer ();
+					case 0x2:
+						return read_real ();
+					case 0x3:
+						return read_date ();
+					case 0x4:
+						return read_data ();
+					case 0x5:
+						return read_ascii_string ();
+					case 0x6:
+						return read_utf16_string ();
+					case 0x8:
+						return read_uid ();
+					case 0xa:
+						return read_array ();
+					case 0xd:
+						return read_dict ();
+					default:
+						throw new PlistError.INVALID_DATA ("Unsupported object type: 0x%x", object_type);
+				}
+			}
+
+			private Value? read_constant () throws GLib.Error {
+				Value? gval;
+
+				switch (object_info) {
+					case 0x0:
+						gval = Value (typeof (PlistNull));
+						gval.take_object (new PlistNull ());
+						break;
+					case 0x8:
+					case 0x9:
+						gval = Value (typeof (bool));
+						gval.set_boolean (object_info == 0x9);
+						break;
+					default:
+						throw new PlistError.INVALID_DATA ("Unsupported constant type: 0x%x", object_info);
+				}
+
+				return gval;
+			}
+
+			private Value? read_integer () throws GLib.Error {
+				if (object_info > 4)
+					throw new PlistError.INVALID_DATA ("Integer too large");
+				uint size = 1 << object_info;
+
+				int64 val;
+				switch (size) {
+					case 1:
+						val = input.read_byte ();
+						break;
+					case 2:
+						val = input.read_uint16 ();
+						break;
+					case 4:
+						val = input.read_uint32 ();
+						break;
+					case 8:
+						val = input.read_int64 ();
+						break;
+					default:
+						throw new PlistError.INVALID_DATA ("Unsupported integer size: %u", size);
+				}
+
+				var gval = Value (typeof (int64));
+				gval.set_int64 (val);
+				return gval;
+			}
+
+			private Value? read_real () throws GLib.Error {
+				Value? gval;
+
+				switch (object_info) {
+					case 2:
+						gval = Value (typeof (float));
+						gval.set_float (read_float ());
+						break;
+					case 3:
+						gval = Value (typeof (double));
+						gval.set_double (read_double ());
+						break;
+					default:
+						throw new PlistError.INVALID_DATA ("Unsupported number size: %u", 1 << object_info);
+				}
+
+				return gval;
+			}
+
+			private float read_float () throws GLib.Error {
+				uint32 bits = input.read_uint32 ();
+				float * val = (float *) &bits;
+				return *val;
+			}
+
+			private double read_double () throws GLib.Error {
+				uint64 bits = input.read_uint64 ();
+				double * val = (double *) &bits;
+				return *val;
+			}
+
+			private Value? read_date () throws GLib.Error {
+				double point_in_time = read_double ();
+
+				uint64 seconds = (uint64) point_in_time;
+				double remainder = point_in_time - (double) seconds;
+
+				var val = TimeVal ();
+				val.tv_sec = (long) (EPOCH + seconds);
+				val.tv_usec = (long) (remainder * 1000000.0);
+
+				var gval = Value (typeof (PlistDate));
+				gval.take_object (new PlistDate (val));
+				return gval;
+			}
+
+			private Value? read_data () throws GLib.Error {
+				uint64 length = object_info;
+				if (object_info == 0xf)
+					length = read_length ();
+				check_object_size (length);
+
+				var buf = new uint8[length];
+				size_t bytes_read;
+				input.read_all (buf, out bytes_read);
+
+				var gval = Value (typeof (Bytes));
+				gval.take_boxed (new Bytes.take ((owned) buf));
+				return gval;
+			}
+
+			private Value? read_ascii_string () throws GLib.Error {
+				uint64 length = object_info;
+				if (object_info == 0xf)
+					length = read_length ();
+				check_object_size (length);
+
+				var str_buf = new uint8[length + 1];
+				str_buf[length] = 0;
+				size_t bytes_read;
+				input.read_all (str_buf[0:length], out bytes_read);
+
+				unowned string str = (string) str_buf;
+
+				var gval = Value (typeof (string));
+				gval.set_string (str);
+				return gval;
+			}
+
+			private Value? read_utf16_string () throws GLib.Error {
+				uint64 length = object_info;
+				if (object_info == 0xf)
+					length = read_length ();
+				uint64 size = length * sizeof (uint16);
+				check_object_size (size);
+
+				var str_chars = new uint16[length + 1];
+				str_chars[length] = 0;
+				unowned uint8[] str_buf = (uint8[]) str_chars;
+				size_t bytes_read;
+				input.read_all (str_buf[0:size], out bytes_read);
+
+				for (uint64 i = 0; i != length; i++)
+					str_chars[i] = uint16.from_big_endian (str_chars[i]);
+
+				unowned string16 str = (string16) str_chars;
+
+				var gval = Value (typeof (string));
+				gval.set_string (str.to_utf8 ());
+				return gval;
+			}
+
+			private Value? read_uid () throws GLib.Error {
+				uint64 val = read_uint_of_size (object_info + 1);
+
+				var gval = Value (typeof (PlistUid));
+				gval.take_object (new PlistUid (val));
+				return gval;
+			}
+
+			private Value? read_array () throws GLib.Error {
+				uint64 length = object_info;
+				if (object_info == 0xf)
+					length = read_length ();
+				check_object_size (length * object_ref_size);
+
+				var element_refs = new uint64[length];
+				for (uint64 i = 0; i != length; i++)
+					element_refs[i] = read_ref ();
+
+				var array = new PlistArray ();
+
+				for (uint64 i = 0; i != length; i++) {
+					var element = parse_object (element_refs[i]);
+					array.add_value (element);
+				}
+
+				var gval = Value (typeof (PlistArray));
+				gval.set_object (array);
+				return gval;
+			}
+
+			private Value? read_dict () throws GLib.Error {
+				uint64 length = object_info;
+				if (object_info == 0xf)
+					length = read_length ();
+				check_object_size (length * (2 * object_ref_size));
+
+				var key_refs = new uint64[length];
+				var val_refs = new uint64[length];
+				for (uint64 i = 0; i != length; i++)
+					key_refs[i] = read_ref ();
+				for (uint64 i = 0; i != length; i++)
+					val_refs[i] = read_ref ();
+
+				var dict = new PlistDict ();
+
+				for (uint64 i = 0; i != length; i++) {
+					var key = parse_object (key_refs[i]);
+					var val = parse_object (val_refs[i]);
+
+					if (!key.holds (typeof (string)))
+						throw new PlistError.INVALID_DATA ("Dict keys must be strings, not %s", key.type_name ());
+
+					dict.set_value (key.get_string (), val);
+				}
+
+				var gval = Value (typeof (PlistDict));
+				gval.set_object (dict);
+				return gval;
+			}
+
+			private uint64 read_offset () throws GLib.Error {
+				return read_uint_of_size (offset_size);
+			}
+
+			private uint64 read_ref () throws GLib.Error {
+				return read_uint_of_size (object_ref_size);
+			}
+
+			private uint64 read_length () throws GLib.Error {
+				var val = read_value ();
+				if (!val.holds (typeof (int64)))
+					throw new PlistError.INVALID_DATA ("Length must be an integer");
+
+				int64 length = val.get_int64 ();
+				if (length < 0)
+					throw new PlistError.INVALID_DATA ("Length must be positive");
+
+				return length;
+			}
+
+			private uint64 read_uint_of_size (uint size) throws GLib.Error {
+				switch (size) {
+					case 1:
+						return input.read_byte ();
+					case 2:
+						return input.read_uint16 ();
+					case 4:
+						return input.read_uint32 ();
+					case 8:
+						return input.read_uint64 ();
+					default:
+						throw new PlistError.INVALID_DATA ("Unsupported uint size: %u", size);
+				}
+			}
+
+			private void check_object_size (uint64 size) throws PlistError {
+				if (size > MAX_OBJECT_SIZE)
+					throw new PlistError.INVALID_DATA ("Object too large");
+			}
 		}
 
 		private class XmlParser : Object {
@@ -155,7 +415,6 @@ namespace Frida.Fruity {
 						if (element_name == "key")
 							partial.need = DICT_KEY_TEXT;
 						return;
-
 					case DICT_VALUE_START:
 						partial.type = element_name;
 						partial.val = null;
@@ -175,7 +434,6 @@ namespace Frida.Fruity {
 						partial.need = DICT_VALUE_TEXT_OR_END;
 
 						return;
-
 					case ARRAY_VALUE_START:
 						partial.type = element_name;
 						partial.val = null;
@@ -217,7 +475,6 @@ namespace Frida.Fruity {
 									parent.dict.set_dict (parent.key, partial.dict);
 									parent.need = DICT_KEY_START;
 									break;
-
 								case ARRAY_VALUE_END:
 									parent.array.add_value (partial.dict);
 									parent.need = ARRAY_VALUE_START;
@@ -226,7 +483,6 @@ namespace Frida.Fruity {
 						}
 
 						return;
-
 					case ARRAY_VALUE_START:
 						if (element_name == "array") {
 							stack.poll_head ();
@@ -249,12 +505,10 @@ namespace Frida.Fruity {
 						}
 
 						return;
-
 					case DICT_KEY_END:
 						if (element_name == "key")
 							partial.need = DICT_VALUE_START;
 						return;
-
 					case DICT_VALUE_TEXT_OR_END:
 					case DICT_VALUE_END: {
 						var val = try_create_value (partial.type, partial.val);
@@ -263,7 +517,6 @@ namespace Frida.Fruity {
 						partial.need = DICT_KEY_START;
 						return;
 					}
-
 					case ARRAY_VALUE_TEXT_OR_END:
 					case ARRAY_VALUE_END: {
 						var val = try_create_value (partial.type, partial.val);
@@ -285,12 +538,10 @@ namespace Frida.Fruity {
 						partial.key = text;
 						partial.need = DICT_KEY_END;
 						return;
-
 					case DICT_VALUE_TEXT_OR_END:
 						partial.val = text;
 						partial.need = DICT_VALUE_END;
 						return;
-
 					case ARRAY_VALUE_TEXT_OR_END:
 						partial.val = text;
 						partial.need = ARRAY_VALUE_END;
@@ -539,7 +790,7 @@ namespace Frida.Fruity {
 			set_value (key, gval);
 		}
 
-		public PlistDict get_dict (string key) throws PlistError {
+		public unowned PlistDict get_dict (string key) throws PlistError {
 			return get_value (key, typeof (PlistDict)).get_object () as PlistDict;
 		}
 
@@ -549,7 +800,7 @@ namespace Frida.Fruity {
 			set_value (key, gval);
 		}
 
-		public PlistArray get_array (string key) throws PlistError {
+		public unowned PlistArray get_array (string key) throws PlistError {
 			return get_value (key, typeof (PlistArray)).get_object () as PlistArray;
 		}
 
@@ -570,6 +821,10 @@ namespace Frida.Fruity {
 
 		public void set_value (string key, Value val) {
 			storage[key] = val;
+		}
+
+		public void set_all (PlistDict dict) {
+			storage.set_all (dict.storage);
 		}
 	}
 
@@ -658,7 +913,7 @@ namespace Frida.Fruity {
 			add_value (gval);
 		}
 
-		public PlistDict get_dict (int index) throws PlistError {
+		public unowned PlistDict get_dict (int index) throws PlistError {
 			return get_value (index, typeof (PlistDict)).get_object () as PlistDict;
 		}
 
@@ -668,7 +923,7 @@ namespace Frida.Fruity {
 			add_value (gval);
 		}
 
-		public PlistArray get_array (int index) throws PlistError {
+		public unowned PlistArray get_array (int index) throws PlistError {
 			return get_value (index, typeof (PlistArray)).get_object () as PlistArray;
 		}
 
@@ -687,6 +942,32 @@ namespace Frida.Fruity {
 
 		public void add_value (Value val) {
 			storage.add (val);
+		}
+	}
+
+	public class PlistNull : Object {
+	}
+
+	public class PlistDate : Object {
+		private TimeVal time;
+
+		public PlistDate (TimeVal time) {
+			this.time = time;
+		}
+
+		public TimeVal get_time () {
+			return time;
+		}
+	}
+
+	public class PlistUid : Object {
+		public uint64 uid {
+			get;
+			construct;
+		}
+
+		public PlistUid (uint64 uid) {
+			Object (uid: uid);
 		}
 	}
 
