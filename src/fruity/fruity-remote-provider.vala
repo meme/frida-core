@@ -33,7 +33,7 @@ namespace Frida {
 
 		private Gee.HashSet<Entry> entries = new Gee.HashSet<Entry> ();
 
-		private const uint DEFAULT_SERVER_PORT = 27042;
+		private const uint16 DEFAULT_SERVER_PORT = 27042;
 
 		public FruityRemoteProvider (string name, Image? icon, Fruity.DeviceDetails details) {
 			Object (
@@ -56,7 +56,7 @@ namespace Frida {
 		}
 
 		public async HostSession create (string? location = null) throws Error {
-			uint port = (location != null) ? (uint) int.parse (location) : DEFAULT_SERVER_PORT;
+			uint16 port = (location != null) ? (uint16) int.parse (location) : DEFAULT_SERVER_PORT;
 			foreach (var entry in entries) {
 				if (entry.port == port)
 					throw new Error.INVALID_ARGUMENT ("Invalid location: already created");
@@ -142,7 +142,7 @@ namespace Frida {
 		private class Entry : Object {
 			public signal void agent_session_closed (AgentSessionId id, SessionDetachReason reason);
 
-			public uint port {
+			public uint16 port {
 				get;
 				construct;
 			}
@@ -164,7 +164,7 @@ namespace Frida {
 
 			private Gee.HashMap<AgentSessionId?, AgentSession> agent_session_by_id = new Gee.HashMap<AgentSessionId?, AgentSession> ();
 
-			public Entry (uint port, Fruity.UsbmuxClient client, DBusConnection connection, HostSession host_session) {
+			public Entry (uint16 port, Fruity.UsbmuxClient client, DBusConnection connection, HostSession host_session) {
 				Object (port: port, client: client, connection: connection, host_session: host_session);
 
 				host_session.agent_session_destroyed.connect (on_agent_session_destroyed);

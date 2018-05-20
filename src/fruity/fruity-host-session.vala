@@ -47,7 +47,7 @@ namespace Frida {
 			if (success) {
 				/* perform a dummy-request to flush out any pending device attach notifications */
 				try {
-					yield control_client.connect_to_port (Fruity.DeviceId (uint.MAX), uint.MAX);
+					yield control_client.connect_to_port (Fruity.DeviceId (uint.MAX), 0);
 					assert_not_reached ();
 				} catch (Fruity.UsbmuxError expected_error) {
 				}

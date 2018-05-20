@@ -110,7 +110,7 @@ namespace Frida.Fruity {
 				if (response.get_string ("MessageType") != "Result")
 					throw new UsbmuxError.PROTOCOL ("Unexpected response message type");
 
-				var result = response.get_int ("Number");
+				var result = (int) response.get_integer ("Number");
 				if (result != ResultCode.SUCCESS)
 					throw new UsbmuxError.FAILED ("Unexpected result while trying to enable listen mode: %d", result);
 			} catch (PlistError e) {
@@ -118,19 +118,19 @@ namespace Frida.Fruity {
 			}
 		}
 
-		public async void connect_to_port (DeviceId device_id, uint port) throws UsbmuxError {
+		public async void connect_to_port (DeviceId device_id, uint16 port) throws UsbmuxError {
 			assert (is_processing_messages);
 
 			var request = create_request ("Connect");
-			request.set_uint ("DeviceID", device_id.raw_value);
-			request.set_uint ("PortNumber", ((uint32) port << 16).to_big_endian ());
+			request.set_integer ("DeviceID", device_id.raw_value);
+			request.set_integer ("PortNumber", ((uint32) port << 16).to_big_endian ());
 
 			var response = yield query (request, true);
 			try {
 				if (response.get_string ("MessageType") != "Result")
 					throw new UsbmuxError.PROTOCOL ("Unexpected response message type");
 
-				var result = response.get_int ("Number");
+				var result = (int) response.get_integer ("Number");
 				switch (result) {
 					case ResultCode.SUCCESS:
 						break;
@@ -155,7 +155,7 @@ namespace Frida.Fruity {
 				if (response.has ("MessageType")) {
 					if (response.get_string ("MessageType") != "Result")
 						throw new UsbmuxError.PROTOCOL ("Unexpected ReadPairRecord response");
-					var result = response.get_int ("Number");
+					var result = (int) response.get_integer ("Number");
 					if (result != 0)
 						throw new UsbmuxError.FAILED ("Unexpected result while trying to read pair record: %d", result);
 				}
@@ -229,13 +229,13 @@ namespace Frida.Fruity {
 					if (message_type == "Attached") {
 						var props = body.get_dict ("Properties");
 						var details = new DeviceDetails (
-							DeviceId ((uint) body.get_int ("DeviceID")),
-							ProductId (props.get_int ("ProductID")),
+							DeviceId ((uint) body.get_integer ("DeviceID")),
+							ProductId ((int) props.get_integer ("ProductID")),
 							Udid (props.get_string ("SerialNumber"))
 						);
 						device_attached (details);
 					} else if (message_type == "Detached") {
-						device_detached (DeviceId ((uint) body.get_int ("DeviceID")));
+						device_detached (DeviceId ((uint) body.get_integer ("DeviceID")));
 					} else {
 						throw new UsbmuxError.PROTOCOL ("Unexpected message type: %s", message_type);
 					}
@@ -260,9 +260,9 @@ namespace Frida.Fruity {
 			match.complete_with_response (response);
 
 			if (tag == mode_switch_tag) {
-				int result;
+				int64 result;
 				try {
-					result = response.get_int ("Number");
+					result = response.get_integer ("Number");
 				} catch (PlistError e) {
 					throw new UsbmuxError.PROTOCOL ("Malformed response: %s", e.message);
 				}

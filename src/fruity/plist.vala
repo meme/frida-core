@@ -590,8 +590,8 @@ namespace Frida.Fruity {
 					result = Value (typeof (bool));
 					result.set_boolean (false);
 				} else if (type == "integer") {
-					result = Value (typeof (int));
-					result.set_int (int.parse (val));
+					result = Value (typeof (int64));
+					result.set_int64 (int64.parse (val));
 				} else if (type == "string") {
 					result = Value (typeof (string));
 					result.set_string (val);
@@ -663,10 +663,8 @@ namespace Frida.Fruity {
 				var type = val.type ();
 				if (type == typeof (bool)) {
 					write_tag (val.get_boolean ().to_string ());
-				} else if (type == typeof (int)) {
-					write_tag ("integer", val.get_int ().to_string ());
-				} else if (type == typeof (uint)) {
-					write_tag ("integer", val.get_uint ().to_string ());
+				} else if (type == typeof (int64)) {
+					write_tag ("integer", val.get_int64 ().to_string ());
 				} else if (type == typeof (string)) {
 					write_tag ("string", Markup.escape_text (val.get_string ()));
 				} else if (type == typeof (Bytes)) {
@@ -744,23 +742,13 @@ namespace Frida.Fruity {
 			set_value (key, gval);
 		}
 
-		public int get_int (string key) throws PlistError {
-			return get_value (key, typeof (int)).get_int ();
+		public int64 get_integer (string key) throws PlistError {
+			return get_value (key, typeof (int64)).get_int64 ();
 		}
 
-		public void set_int (string key, int val) {
-			var gval = Value (typeof (int));
-			gval.set_int (val);
-			set_value (key, gval);
-		}
-
-		public uint get_uint (string key) throws PlistError {
-			return get_value (key, typeof (uint)).get_uint ();
-		}
-
-		public void set_uint (string key, uint val) {
-			var gval = Value (typeof (uint));
-			gval.set_uint (val);
+		public void set_integer (string key, int64 val) {
+			var gval = Value (typeof (int64));
+			gval.set_int64 (val);
 			set_value (key, gval);
 		}
 
@@ -867,23 +855,13 @@ namespace Frida.Fruity {
 			add_value (gval);
 		}
 
-		public int get_int (int index) throws PlistError {
-			return get_value (index, typeof (int)).get_int ();
+		public int64 get_integer (int index) throws PlistError {
+			return get_value (index, typeof (int64)).get_int64 ();
 		}
 
-		public void add_int (int val) {
-			var gval = Value (typeof (int));
-			gval.set_int (val);
-			add_value (gval);
-		}
-
-		public uint get_uint (int index) throws PlistError {
-			return get_value (index, typeof (uint)).get_uint ();
-		}
-
-		public void add_uint (uint val) {
-			var gval = Value (typeof (uint));
-			gval.set_uint (val);
+		public void add_integer (int64 val) {
+			var gval = Value (typeof (int64));
+			gval.set_int64 (val);
 			add_value (gval);
 		}
 

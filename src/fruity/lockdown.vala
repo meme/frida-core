@@ -7,7 +7,7 @@ namespace Frida.Fruity {
 
 		private PlistServiceClient service;
 
-		private const uint LOCKDOWN_PORT = 62078;
+		private const uint16 LOCKDOWN_PORT = 62078;
 
 		private LockdownClient (DeviceDetails device_details) {
 			Object (device_details: device_details);
@@ -60,7 +60,7 @@ namespace Frida.Fruity {
 				var response = yield service.query (request);
 
 				var service_transport = yield UsbmuxClient.open ();
-				yield service_transport.connect_to_port (device_details.id, response.get_int ("Port"));
+				yield service_transport.connect_to_port (device_details.id, (uint16) response.get_integer ("Port"));
 
 				return service_transport.connection;
 			} catch (PlistServiceError e) {

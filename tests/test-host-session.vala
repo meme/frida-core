@@ -2648,15 +2648,15 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 				try {
 					var plist = new Frida.Fruity.Plist.from_xml (xml);
 					assert (plist.size == 3);
-					assert (plist.get_int ("DeviceID") == 2);
+					assert (plist.get_integer ("DeviceID") == 2);
 					assert (plist.get_string ("MessageType") == "Attached");
 
 					var properties = plist.get_dict ("Properties");
 					assert (properties.size == 9);
 					assert (properties.get_string ("ConnectionType") == "USB");
-					assert (properties.get_int ("DeviceID") == 2);
-					assert (properties.get_int ("LocationID") == 0);
-					assert (properties.get_int ("ProductID") == 4759);
+					assert (properties.get_integer ("DeviceID") == 2);
+					assert (properties.get_integer ("LocationID") == 0);
+					assert (properties.get_integer ("ProductID") == 4759);
 					assert (properties.get_string ("SerialNumber") == "220f889780dda462091a65df48b9b6aedb05490f");
 
 					assert (properties.get_boolean ("ExtraBoolTrue") == true);
@@ -2681,11 +2681,11 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 			private static void to_xml_yields_complete_document () {
 				var plist = new Frida.Fruity.Plist ();
 				plist.set_string ("MessageType", "Detached");
-				plist.set_int ("DeviceID", 2);
+				plist.set_integer ("DeviceID", 2);
 
 				var properties = new Frida.Fruity.PlistDict ();
 				properties.set_string ("ConnectionType", "USB");
-				properties.set_int ("DeviceID", 2);
+				properties.set_integer ("DeviceID", 2);
 				properties.set_boolean ("ExtraBoolTrue", true);
 				properties.set_boolean ("ExtraBoolFalse", false);
 				properties.set_bytes ("ExtraData", new Bytes ({ 0x01, 0x02, 0x03 }));
