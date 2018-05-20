@@ -62,9 +62,27 @@ namespace Frida.Fruity {
 				string status = "";
 				do {
 					var response = yield reader.read ();
-					printerr ("Got response: %s\n", response.to_xml ());
 
 					status = response.get_string ("Status");
+					if (status == "BrowsingApplications") {
+						var entries = response.get_array ("CurrentList");
+						var length = entries.length;
+						for (int i = 0; i != length; i++) {
+							var entry = entries.get_dict (i);
+
+							string identifier = entry.get_string ("CFBundleIdentifier");
+							string name = entry.get_string ("CFBundleDisplayName");
+							string path = entry.get_string ("Path");
+							string? container = entry.has ("Container") ? entry.get_string ("Container") : null;
+							bool debuggable = false;
+							if (entry.has ("Entitlements")) {
+								var entitlements = entry.get_dict ("Entitlements");
+								debuggable = entitlements.has ("get-task-allow") && entitlements.get_boolean ("get-task-allow");
+							}
+
+							apps.add (new ApplicationDetails (identifier, name, path, container, debuggable));
+						}
+					}
 				} while (status != "Complete");
 
 				return apps;
@@ -109,10 +127,28 @@ namespace Frida.Fruity {
 			construct;
 		}
 
-		public ApplicationDetails (string identifier, string name) {
+		public string path {
+			get;
+			construct;
+		}
+
+		public string? container {
+			get;
+			construct;
+		}
+
+		public bool debuggable {
+			get;
+			construct;
+		}
+
+		public ApplicationDetails (string identifier, string name, string path, string? container, bool debuggable) {
 			Object (
 				identifier: identifier,
-				name: name
+				name: name,
+				path: path,
+				container: container,
+				debuggable: debuggable
 			);
 		}
 	}

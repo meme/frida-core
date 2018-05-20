@@ -55,7 +55,8 @@ namespace Frida {
 					var apps = yield installation_proxy.enumerate_applications ();
 					print ("Got %u apps:\n", apps.size);
 					foreach (var app in apps) {
-						printerr ("\t<identifier='%s' name='%s'>\n", app.identifier, app.name);
+						printerr ("\t<identifier='%s' name='%s' path='%s' container='%s' debuggable=%s>\n",
+							app.identifier, app.name, app.path, app.container, app.debuggable.to_string ());
 					}
 				} finally {
 					yield lockdown.close ();
