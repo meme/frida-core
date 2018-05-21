@@ -277,6 +277,7 @@ fruity_sources = [
   'fruity/fruity-lockdown-provider.vala',
   'fruity/lockdown.vala',
   'fruity/installation-proxy.vala',
+  'fruity/lldb.vala',
   'fruity/usbmux.vala',
   'fruity/plist.vala',
   'fruity/plist-service.vala',

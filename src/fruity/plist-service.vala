@@ -36,14 +36,14 @@ namespace Frida.Fruity {
 			if (tls_connection != null) {
 				try {
 					yield tls_connection.close_async ();
-				} catch (GLib.IOError e) {
+				} catch (IOError e) {
 				}
 				tls_connection = null;
 			}
 
 			try {
 				yield stream.close_async ();
-			} catch (GLib.IOError e) {
+			} catch (IOError e) {
 			}
 		}
 

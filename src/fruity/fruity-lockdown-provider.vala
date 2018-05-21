@@ -138,11 +138,15 @@ namespace Frida {
 				var app = yield installation_proxy.lookup_one (program);
 				if (app == null)
 					throw new Error.INVALID_ARGUMENT ("Unable to find app with bundle identifier '%s'", program);
-
 				printerr ("App name='%s' path='%s'\n", app.name, app.path);
+
+				var lldb = yield Fruity.LLDBClient.open (lockdown);
+				printerr ("Got LLDB client %p\n", lldb);
 
 				throw new Error.NOT_SUPPORTED ("Not yet fully implemented");
 			} catch (Fruity.InstallationProxyError e) {
+				throw new Error.NOT_SUPPORTED ("%s", e.message);
+			} catch (Fruity.LLDBError e) {
 				throw new Error.NOT_SUPPORTED ("%s", e.message);
 			}
 		}
