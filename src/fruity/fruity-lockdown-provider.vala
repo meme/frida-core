@@ -135,8 +135,7 @@ namespace Frida {
 			try {
 				var installation_proxy = yield Fruity.InstallationProxyClient.open (lockdown);
 
-				var apps = yield installation_proxy.lookup ({ program });
-				var app = apps[program];
+				var app = yield installation_proxy.lookup_one (program);
 				if (app == null)
 					throw new Error.INVALID_ARGUMENT ("Unable to find app with name '%s'", program);
 

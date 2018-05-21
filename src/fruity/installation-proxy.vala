@@ -70,7 +70,7 @@ namespace Frida.Fruity {
 			}
 		}
 
-		public async Gee.HashMap<string, ApplicationDetails> lookup (string[] bundle_ids) throws InstallationProxyError {
+		public async Gee.HashMap<string, ApplicationDetails> lookup (string[] identifiers) throws InstallationProxyError {
 			try {
 				var result = new Gee.HashMap<string, ApplicationDetails> ();
 
@@ -80,7 +80,7 @@ namespace Frida.Fruity {
 				request.set_dict ("ClientOptions", options);
 				var ids = new PlistArray ();
 				options.set_array ("BundleIDs", ids);
-				foreach (var bundle_id in bundle_ids)
+				foreach (var bundle_id in identifiers)
 					ids.add_string (bundle_id);
 
 				var reader = yield service.begin_query (request);
@@ -101,6 +101,11 @@ namespace Frida.Fruity {
 			} catch (PlistError e) {
 				throw error_from_plist (e);
 			}
+		}
+
+		public async ApplicationDetails? lookup_one (string identifier) throws InstallationProxyError {
+			var matches = yield lookup ({ identifier });
+			return matches[identifier];
 		}
 
 		private static Plist create_request (string command) {
