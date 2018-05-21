@@ -2599,6 +2599,8 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 					var device = yield device_manager.get_device_by_id (device_id + ":lockdown");
 					var apps = yield device.enumerate_applications ();
 					printerr ("got %d apps\n", apps.size ());
+
+					h.done ();
 				} catch (GLib.Error e) {
 					printerr ("\nFAIL: %s\n\n", e.message);
 					assert_not_reached ();

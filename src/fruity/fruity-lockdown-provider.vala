@@ -50,31 +50,109 @@ namespace Frida {
 		public async HostSession create (string? location = null) throws Error {
 			try {
 				var lockdown = yield Fruity.LockdownClient.open (device_details);
-				try {
-					var installation_proxy = yield Fruity.InstallationProxyClient.open (lockdown);
-					var apps = yield installation_proxy.enumerate_applications ();
-					print ("Got %u apps:\n", apps.size);
-					foreach (var app in apps) {
-						printerr ("\t<identifier='%s' name='%s' path='%s' container='%s' debuggable=%s>\n",
-							app.identifier, app.name, app.path, app.container, app.debuggable.to_string ());
-					}
-				} finally {
-					yield lockdown.close ();
-				}
+
+				return new FruityLockdownSession (lockdown);
 			} catch (Fruity.LockdownError e) {
 				throw new Error.NOT_SUPPORTED ("%s", e.message);
-			} catch (Fruity.InstallationProxyError e) {
-				throw new Error.NOT_SUPPORTED ("%s", e.message);
 			}
-
-			throw new Error.NOT_SUPPORTED ("Not yet fully implemented");
 		}
 
 		public async void destroy (HostSession host_session) throws Error {
-			throw new Error.NOT_SUPPORTED ("Not yet implemented");
+			var session = host_session as FruityLockdownSession;
+
+			yield session.close ();
 		}
 
 		public async AgentSession obtain_agent_session (HostSession host_session, AgentSessionId agent_session_id) throws Error {
+			throw new Error.NOT_SUPPORTED ("Not yet implemented");
+		}
+	}
+
+	public class FruityLockdownSession : Object, HostSession {
+		public Fruity.LockdownClient lockdown {
+			get;
+			construct;
+		}
+
+		public FruityLockdownSession (Fruity.LockdownClient lockdown) {
+			Object (lockdown: lockdown);
+		}
+
+		public async void close () {
+			yield lockdown.close ();
+		}
+
+		public async HostApplicationInfo get_frontmost_application () throws Error {
+			throw new Error.NOT_SUPPORTED ("Not yet implemented");
+		}
+
+		public async HostApplicationInfo[] enumerate_applications () throws Error {
+			try {
+				var installation_proxy = yield Fruity.InstallationProxyClient.open (lockdown);
+
+				var apps = yield installation_proxy.enumerate_applications ();
+
+				uint no_pid = 0;
+				var no_icon = ImageData (0, 0, 0, "");
+
+				var result = new HostApplicationInfo[apps.size];
+				int i = 0;
+				foreach (var app in apps) {
+					result[i] = HostApplicationInfo (app.identifier, app.name, no_pid, no_icon, no_icon);
+					i++;
+				}
+
+				return result;
+			} catch (Fruity.InstallationProxyError e) {
+				throw new Error.NOT_SUPPORTED ("%s", e.message);
+			}
+		}
+
+		public async HostProcessInfo[] enumerate_processes () throws Error {
+			throw new Error.NOT_SUPPORTED ("Not yet implemented");
+		}
+
+		public async void enable_spawn_gating () throws Error {
+			throw new Error.NOT_SUPPORTED ("Not yet implemented");
+		}
+
+		public async void disable_spawn_gating () throws Error {
+			throw new Error.NOT_SUPPORTED ("Not yet implemented");
+		}
+
+		public async HostSpawnInfo[] enumerate_pending_spawn () throws Error {
+			throw new Error.NOT_SUPPORTED ("Not yet implemented");
+		}
+
+		public async HostChildInfo[] enumerate_pending_children () throws Error {
+			throw new Error.NOT_SUPPORTED ("Not yet implemented");
+		}
+
+		public async uint spawn (string program, HostSpawnOptions options) throws Error {
+			throw new Error.NOT_SUPPORTED ("Not yet implemented");
+		}
+
+		public async void input (uint pid, uint8[] data) throws Error {
+			throw new Error.NOT_SUPPORTED ("Not yet implemented");
+		}
+
+		public async void resume (uint pid) throws Error {
+			throw new Error.NOT_SUPPORTED ("Not yet implemented");
+		}
+
+		public async void kill (uint pid) throws Error {
+			throw new Error.NOT_SUPPORTED ("Not yet implemented");
+		}
+
+		public async AgentSessionId attach_to (uint pid) throws Error {
+			throw new Error.NOT_SUPPORTED ("Not yet implemented");
+		}
+
+		public async InjectorPayloadId inject_library_file (uint pid, string path, string entrypoint, string data) throws Error {
+			throw new Error.NOT_SUPPORTED ("Not yet implemented");
+		}
+
+		public async InjectorPayloadId inject_library_blob (uint pid, uint8[] blob, string entrypoint, string data) throws Error {
 			throw new Error.NOT_SUPPORTED ("Not yet implemented");
 		}
 	}
