@@ -90,7 +90,7 @@ namespace Frida {
 			try {
 				var installation_proxy = yield Fruity.InstallationProxyClient.open (lockdown);
 
-				var apps = yield installation_proxy.enumerate_applications ();
+				var apps = yield installation_proxy.browse ();
 
 				uint no_pid = 0;
 				var no_icon = ImageData (0, 0, 0, "");
@@ -129,7 +129,23 @@ namespace Frida {
 		}
 
 		public async uint spawn (string program, HostSpawnOptions options) throws Error {
-			throw new Error.NOT_SUPPORTED ("Not yet implemented");
+			if (program[0] == '/')
+				throw new Error.NOT_SUPPORTED ("Only able to spawn apps");
+
+			try {
+				var installation_proxy = yield Fruity.InstallationProxyClient.open (lockdown);
+
+				var apps = yield installation_proxy.lookup ({ program });
+				var app = apps[program];
+				if (app == null)
+					throw new Error.INVALID_ARGUMENT ("Unable to find app with name '%s'", program);
+
+				printerr ("app name='%s' path='%s'\n", app.name, app.path);
+
+				throw new Error.NOT_SUPPORTED ("Not yet fully implemented");
+			} catch (Fruity.InstallationProxyError e) {
+				throw new Error.NOT_SUPPORTED ("%s", e.message);
+			}
 		}
 
 		public async void input (uint pid, uint8[] data) throws Error {

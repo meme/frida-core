@@ -2597,14 +2597,22 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 
 				try {
 					var device = yield device_manager.get_device_by_id (device_id + ":lockdown");
+
 					var apps = yield device.enumerate_applications ();
 					printerr ("got %d apps\n", apps.size ());
+					var length = apps.size ();
+					for (int i = 0; i != length; i++) {
+						var app = apps.get (i);
+						printerr ("\t%s\n", app.identifier);
+					}
 
-					h.done ();
+					var pid = yield device.spawn ("no.oleavr.FridaBeachHead");
+					printerr ("spawn() => PID=%u\n", pid);
 				} catch (GLib.Error e) {
 					printerr ("\nFAIL: %s\n\n", e.message);
-					assert_not_reached ();
 				}
+
+				h.done ();
 			}
 
 		}
