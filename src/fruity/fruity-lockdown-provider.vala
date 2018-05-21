@@ -137,9 +137,9 @@ namespace Frida {
 
 				var app = yield installation_proxy.lookup_one (program);
 				if (app == null)
-					throw new Error.INVALID_ARGUMENT ("Unable to find app with name '%s'", program);
+					throw new Error.INVALID_ARGUMENT ("Unable to find app with bundle identifier '%s'", program);
 
-				printerr ("app name='%s' path='%s'\n", app.name, app.path);
+				printerr ("App name='%s' path='%s'\n", app.name, app.path);
 
 				throw new Error.NOT_SUPPORTED ("Not yet fully implemented");
 			} catch (Fruity.InstallationProxyError e) {
