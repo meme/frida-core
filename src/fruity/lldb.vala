@@ -13,7 +13,7 @@ namespace Frida.Fruity {
 		private State state = STOPPED;
 		private AckMode ack_mode = SEND_ACKS;
 		private Gee.ArrayQueue<Bytes> pending_writes = new Gee.ArrayQueue<Bytes> ();
-		private Gee.ArrayList<PendingResponse> pending_responses = new Gee.ArrayList<PendingResponse> ();
+		private Gee.ArrayQueue<PendingResponse> pending_responses = new Gee.ArrayQueue<PendingResponse> ();
 
 		private enum State {
 			STOPPED,
@@ -26,9 +26,17 @@ namespace Frida.Fruity {
 			SKIP_ACKS
 		}
 
+		private enum ChecksumType {
+			PROPER,
+			ZEROED
+		}
+
 		private const string ACK_NOTIFICATION = "+";
 		private const string NACK_NOTIFICATION = "-";
+		private const string PACKET_MARKER = "$";
+		private const char PACKET_CHARACTER = '$';
 		private const string CHECKSUM_MARKER = "#";
+		private const char CHECKSUM_CHARACTER = '#';
 		private const char ESCAPE_CHARACTER = '}';
 		private const uint8 ESCAPE_KEY = 0x20;
 		private const char REPEAT_CHARACTER = '*';
@@ -60,6 +68,13 @@ namespace Frida.Fruity {
 
 				process_incoming_packets.begin ();
 				write_string (ACK_NOTIFICATION);
+
+				yield request ("QStartNoAckMode");
+				ack_mode = SKIP_ACKS;
+
+				yield request ("QThreadSuffixSupported");
+				yield request ("QListThreadsInStopReply");
+				yield request ("QSetDetachOnError:0");
 			} catch (LockdownError e) {
 				throw new LLDBError.FAILED ("%s", e.message);
 			}
@@ -68,10 +83,33 @@ namespace Frida.Fruity {
 		}
 
 		public async void close () {
+			cancellable.cancel ();
+
+			var source = new IdleSource ();
+			source.set_callback (() => {
+				close.callback ();
+				return false;
+			});
+			source.attach (MainContext.get_thread_default ());
+			yield;
+
 			try {
 				yield stream.close_async ();
 			} catch (IOError e) {
 			}
+		}
+
+		private async Packet request (string payload) throws LLDBError {
+			var pending = new PendingResponse (() => request.callback ());
+			pending_responses.offer_tail (pending);
+			write_packet (payload);
+			yield;
+
+			var response = pending.response;
+			if (response == null)
+				throw pending.error;
+
+			return response;
 		}
 
 		private async void process_incoming_packets () {
@@ -82,6 +120,7 @@ namespace Frida.Fruity {
 				} catch (LLDBError error) {
 					foreach (var pending_response in pending_responses)
 						pending_response.complete_with_error (error);
+					pending_responses.clear ();
 					return;
 				}
 			}
@@ -103,7 +142,36 @@ namespace Frida.Fruity {
 		}
 
 		private void dispatch_packet (Packet packet) throws LLDBError {
-			// TODO
+			switch (state) {
+				case STOPPED:
+					handle_response (packet);
+					break;
+				case RUNNING:
+				case STOPPING:
+					handle_notification (packet);
+					break;
+				default:
+					assert_not_reached ();
+			}
+		}
+
+		private void handle_response (Packet response) throws LLDBError {
+			printerr ("<<< response: %s\n", response.payload);
+
+			var pending = pending_responses.poll_head ();
+			if (pending == null)
+				throw new LLDBError.PROTOCOL ("Unexpected response");
+
+			var payload = response.payload;
+			if (payload.length == 3 && payload[0] == 'E') {
+				pending.complete_with_error (new LLDBError.FAILED ("Request failed: %s", payload[1:3]));
+			} else {
+				pending.complete_with_response (response);
+			}
+		}
+
+		private void handle_notification (Packet packet) throws LLDBError {
+			printerr ("<<< notification: %s\n", packet.payload);
 		}
 
 		private async Packet read_packet () throws LLDBError {
@@ -129,6 +197,11 @@ namespace Frida.Fruity {
 			return packet;
 		}
 
+		private void write_packet (string payload) {
+			var checksum_type = (ack_mode == SEND_ACKS) ? ChecksumType.PROPER : ChecksumType.ZEROED;
+			write_bytes (packetize (payload, checksum_type));
+		}
+
 		private async string read_string (uint length) throws LLDBError {
 			var buf = new uint8[length + 1];
 			buf[length] = 0;
@@ -152,9 +225,45 @@ namespace Frida.Fruity {
 		}
 
 		private void write_bytes (Bytes bytes) {
+			unowned string payload = (string) bytes.get_data ();
+			printerr (">>> %s\n", payload);
+
 			pending_writes.offer_tail (bytes);
 			if (pending_writes.size == 1)
 				process_pending_writes.begin ();
+		}
+
+		private static Bytes packetize (string payload, ChecksumType checksum_type) {
+			var result = new StringBuilder.sized (1 + payload.length + 1 + 2);
+
+			result.append_c (PACKET_CHARACTER);
+
+			var length = payload.length;
+			for (int i = 0; i != length; i++) {
+				char ch = payload[i];
+				switch (ch) {
+					case PACKET_CHARACTER:
+					case CHECKSUM_CHARACTER:
+					case ESCAPE_CHARACTER:
+					case REPEAT_CHARACTER:
+						result.append_c (ESCAPE_CHARACTER);
+						result.append_c ((char) ((uint8) ch ^ ESCAPE_KEY));
+						break;
+					default:
+						result.append_c (ch);
+						break;
+				}
+			}
+
+			result.append_c (CHECKSUM_CHARACTER);
+
+			if (checksum_type == PROPER) {
+				result.append_printf ("%02x", compute_checksum (result.str[1:1 + length]));
+			} else {
+				result.append ("00");
+			}
+
+			return StringBuilder.free_to_bytes ((owned) result);
 		}
 
 		private static Packet depacketize (string data) throws LLDBError {
@@ -179,6 +288,16 @@ namespace Frida.Fruity {
 			}
 
 			return new Packet.from_bytes (StringBuilder.free_to_bytes ((owned) result));
+		}
+
+		private static uint8 compute_checksum (string data) {
+			uint8 sum = 0;
+
+			var length = data.length;
+			for (int i = 0; i != length; i++)
+				sum += (uint8) data[i];
+
+			return sum;
 		}
 
 		private class Packet {
