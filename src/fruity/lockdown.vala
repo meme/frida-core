@@ -58,6 +58,13 @@ namespace Frida.Fruity {
 				request.set_string ("Service", name);
 
 				var response = yield service.query (request);
+				if (response.has ("Error")) {
+					var error = response.get_string ("Error");
+					if (error == "InvalidService")
+						throw new LockdownError.INVALID_SERVICE ("Service '%s' is not available", name);
+					else
+						throw new LockdownError.FAILED ("Unexpected response: %s", error);
+				}
 
 				var service_transport = yield UsbmuxClient.open ();
 				yield service_transport.connect_to_port (device_details.id, (uint16) response.get_integer ("Port"));
@@ -133,6 +140,7 @@ namespace Frida.Fruity {
 	public errordomain LockdownError {
 		FAILED,
 		CONNECTION_CLOSED,
+		INVALID_SERVICE,
 		PROTOCOL
 	}
 }
