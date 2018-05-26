@@ -216,8 +216,6 @@ namespace Frida.Fruity {
 		}
 
 		private void handle_response (Packet response) throws LLDBError {
-			printerr ("<<< response: '%s'\n", response.payload);
-
 			var pending = pending_responses.poll_head ();
 			if (pending == null)
 				throw new LLDBError.PROTOCOL ("Unexpected response");
@@ -231,7 +229,6 @@ namespace Frida.Fruity {
 		}
 
 		private void handle_notification (Packet packet) throws LLDBError {
-			printerr ("<<< notification: '%s'\n", packet.payload);
 		}
 
 		private async Packet read_packet () throws LLDBError {
@@ -287,9 +284,6 @@ namespace Frida.Fruity {
 		}
 
 		private void write_bytes (Bytes bytes) {
-			unowned string payload = (string) bytes.get_data ();
-			printerr (">>> %s\n", payload);
-
 			pending_writes.offer_tail (bytes);
 			if (pending_writes.size == 1)
 				process_pending_writes.begin ();
