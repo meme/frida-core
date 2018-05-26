@@ -76,7 +76,10 @@ namespace Frida.Fruity {
 				yield request ("QListThreadsInStopReply");
 				yield request ("QSetDetachOnError:0");
 			} catch (LockdownError e) {
-				throw new LLDBError.FAILED ("%s", e.message);
+				if (e is LockdownError.INVALID_SERVICE)
+					throw new LLDBError.DDI_NOT_MOUNTED ("Developer Disk Image not mounted");
+				else
+					throw new LLDBError.FAILED ("%s", e.message);
 			}
 
 			return true;
@@ -347,6 +350,7 @@ namespace Frida.Fruity {
 	public errordomain LLDBError {
 		FAILED,
 		CONNECTION_CLOSED,
+		DDI_NOT_MOUNTED,
 		PROTOCOL
 	}
 }
