@@ -61,7 +61,7 @@ namespace Frida.Fruity {
 				if (response.has ("Error")) {
 					var error = response.get_string ("Error");
 					if (error == "InvalidService")
-						throw new LockdownError.INVALID_SERVICE ("Service '%s' is not available", name);
+						throw new LockdownError.INVALID_SERVICE ("Service '%s' not found", name);
 					else
 						throw new LockdownError.FAILED ("Unexpected response: %s", error);
 				}

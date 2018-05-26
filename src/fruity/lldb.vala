@@ -102,6 +102,39 @@ namespace Frida.Fruity {
 			}
 		}
 
+		public async void launch (string[] argv, LaunchOptions? options = null) throws LLDBError {
+			if (options != null) {
+				foreach (var env in options.env)
+					yield request ("QEnvironment:" + env);
+
+				var arch = options.arch;
+				if (arch != null)
+					yield request ("QLaunchArch:" + arch);
+
+				if (options.aslr == DISABLE)
+					yield request ("QSetDisableASLR:1");
+			}
+
+			var set_args_request = new StringBuilder ("A");
+			int arg_index = 0;
+			foreach (var arg in argv) {
+				if (arg_index > 0)
+					set_args_request.append_c (',');
+
+				var length = arg.length;
+				var hex_length = length * 2;
+				set_args_request.append_printf ("%u,%u,", hex_length, arg_index);
+
+				for (int byte_index = 0; byte_index != length; byte_index++)
+					set_args_request.append_printf ("%02x", arg[byte_index]);
+
+				arg_index++;
+			}
+			yield request (set_args_request.str);
+
+			yield request ("qLaunchSuccess");
+		}
+
 		private async Packet request (string payload) throws LLDBError {
 			var pending = new PendingResponse (() => request.callback ());
 			pending_responses.offer_tail (pending);
@@ -159,7 +192,7 @@ namespace Frida.Fruity {
 		}
 
 		private void handle_response (Packet response) throws LLDBError {
-			printerr ("<<< response: %s\n", response.payload);
+			printerr ("<<< response: '%s'\n", response.payload);
 
 			var pending = pending_responses.poll_head ();
 			if (pending == null)
@@ -174,7 +207,7 @@ namespace Frida.Fruity {
 		}
 
 		private void handle_notification (Packet packet) throws LLDBError {
-			printerr ("<<< notification: %s\n", packet.payload);
+			printerr ("<<< notification: '%s'\n", packet.payload);
 		}
 
 		private async Packet read_packet () throws LLDBError {
@@ -186,6 +219,8 @@ namespace Frida.Fruity {
 			try {
 				size_t rest_length;
 				rest = yield input.read_upto_async (CHECKSUM_MARKER, 1, Priority.DEFAULT, cancellable, out rest_length);
+				if (rest_length == 0)
+					rest = "";
 			} catch (IOError e) {
 				throw new LLDBError.CONNECTION_CLOSED ("%s", e.message);
 			}
@@ -273,7 +308,7 @@ namespace Frida.Fruity {
 			var length = data.length;
 			var result = new StringBuilder.sized (length);
 
-			for (int offset = 0; offset != length; offset++) {
+			for (int offset = 1; offset < length - 3; offset++) {
 				char ch = data[offset];
 				if (ch == ESCAPE_CHARACTER) {
 					uint8 escaped_byte = data[++offset];
@@ -352,5 +387,29 @@ namespace Frida.Fruity {
 		CONNECTION_CLOSED,
 		DDI_NOT_MOUNTED,
 		PROTOCOL
+	}
+
+	public class LaunchOptions : Object {
+		public string[] env {
+			get;
+			set;
+			default = {};
+		}
+
+		public string? arch {
+			get;
+			set;
+		}
+
+		public Aslr aslr {
+			get;
+			set;
+			default = AUTO;
+		}
+	}
+
+	public enum Aslr {
+		AUTO,
+		DISABLE
 	}
 }

@@ -132,16 +132,47 @@ namespace Frida {
 			if (program[0] == '/')
 				throw new Error.NOT_SUPPORTED ("Only able to spawn apps");
 
+			var launch_options = new Fruity.LaunchOptions ();
+
+			if (options.has_envp)
+				throw new Error.NOT_SUPPORTED ("The 'envp' option is not supported when spawning iOS apps");
+
+			if (options.has_env)
+				launch_options.env = options.env;
+
+			if (options.cwd.length > 0)
+				throw new Error.NOT_SUPPORTED ("The 'cwd' option is not supported when spawning iOS apps");
+
+			var aux_options = options.load_aux ();
+
+			if (aux_options.contains ("aslr")) {
+				string? aslr = null;
+				if (!aux_options.lookup ("aslr", "s", out aslr) || (aslr != "auto" && aslr != "disable"))
+					throw new Error.INVALID_ARGUMENT ("The 'aslr' option must be a string set to either 'auto' or 'disable'");
+				launch_options.aslr = (aslr == "auto") ? Fruity.Aslr.AUTO : Fruity.Aslr.DISABLE;
+			}
+
 			try {
 				var installation_proxy = yield Fruity.InstallationProxyClient.open (lockdown);
 
 				var app = yield installation_proxy.lookup_one (program);
 				if (app == null)
 					throw new Error.INVALID_ARGUMENT ("Unable to find app with bundle identifier '%s'", program);
-				printerr ("App name='%s' path='%s'\n", app.name, app.path);
+
+				if (!app.debuggable)
+					throw new Error.INVALID_ARGUMENT ("Application '%s' is not debuggable", program);
 
 				var lldb = yield Fruity.LLDBClient.open (lockdown);
-				printerr ("Got LLDB client %p\n", lldb);
+
+				string[] argv = { app.path };
+				if (options.has_argv) {
+					var provided_argv = options.argv;
+					var length = provided_argv.length;
+					for (int i = 1; i < length; i++)
+						argv += provided_argv[i];
+				}
+
+				yield lldb.launch (argv, launch_options);
 
 				throw new Error.NOT_SUPPORTED ("Not yet fully implemented");
 			} catch (Fruity.InstallationProxyError e) {
