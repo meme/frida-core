@@ -172,9 +172,9 @@ namespace Frida {
 						argv += provided_argv[i];
 				}
 
-				yield lldb.launch (argv, launch_options);
+				var process = yield lldb.launch (argv, launch_options);
 
-				throw new Error.NOT_SUPPORTED ("Not yet fully implemented");
+				return process.pid;
 			} catch (Fruity.InstallationProxyError e) {
 				throw new Error.NOT_SUPPORTED ("%s", e.message);
 			} catch (Fruity.LLDBError e) {
