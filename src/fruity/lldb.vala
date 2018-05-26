@@ -102,7 +102,7 @@ namespace Frida.Fruity {
 			}
 		}
 
-		public async void launch (string[] argv, LaunchOptions? options = null) throws LLDBError {
+		public async ProcessInfo launch (string[] argv, LaunchOptions? options = null) throws LLDBError {
 			if (options != null) {
 				foreach (var env in options.env)
 					yield request ("QEnvironment:" + env);
@@ -133,6 +133,30 @@ namespace Frida.Fruity {
 			yield request (set_args_request.str);
 
 			yield request ("qLaunchSuccess");
+
+			return yield get_process_info ();
+		}
+
+		private async ProcessInfo get_process_info () throws LLDBError {
+			var response = yield request ("qProcessInfo");
+
+			var raw_info = PropertyDictionary.parse (response.payload);
+
+			var info = new ProcessInfo ();
+			info.pid = raw_info.get_uint ("pid");
+			info.parent_pid = raw_info.get_uint ("parent-pid");
+			info.real_uid = raw_info.get_uint ("real-uid");
+			info.real_gid = raw_info.get_uint ("real-gid");
+			info.effective_uid = raw_info.get_uint ("effective-uid");
+			info.effective_gid = raw_info.get_uint ("effective-gid");
+			info.cpu_type = raw_info.get_uint ("cputype");
+			info.cpu_subtype = raw_info.get_uint ("cpusubtype");
+			info.pointer_size = raw_info.get_uint ("ptrsize");
+			info.os_type = raw_info.get_string ("ostype");
+			info.vendor = raw_info.get_string ("vendor");
+			info.byte_order = (raw_info.get_string ("endian") == "little") ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN;
+
+			return info;
 		}
 
 		private async Packet request (string payload) throws LLDBError {
@@ -380,6 +404,52 @@ namespace Frida.Fruity {
 				handler ();
 			}
 		}
+
+		private class PropertyDictionary {
+			private Gee.HashMap<string, string> properties = new Gee.HashMap<string, string> ();
+
+			public static PropertyDictionary parse (string raw_properties) throws LLDBError {
+				var dictionary = new PropertyDictionary ();
+
+				var properties = dictionary.properties;
+
+				var pairs = raw_properties.split (";");
+				foreach (var pair in pairs) {
+					if (pair.length == 0)
+						continue;
+
+					var tokens = pair.split (":", 2);
+					if (tokens.length != 2)
+						throw new LLDBError.PROTOCOL ("Invalid property dictionary pair");
+					var key = tokens[0];
+					var val = tokens[1];
+
+					properties[key] = val;
+				}
+
+				return dictionary;
+			}
+
+			public uint get_uint (string name) throws LLDBError {
+				var raw_val = get_string (name);
+
+				uint64 val;
+				try {
+					uint64.from_string (raw_val, out val, 16, uint.MIN, uint.MAX);
+				} catch (NumberParserError e) {
+					throw new LLDBError.PROTOCOL ("Property '%s' is not a valid uint: %s", name, e.message);
+				}
+
+				return (uint) val;
+			}
+
+			public string get_string (string name) throws LLDBError {
+				var val = properties[name];
+				if (val == null)
+					throw new LLDBError.PROTOCOL ("Property '%s' not found", name);
+				return val;
+			}
+		}
 	}
 
 	public errordomain LLDBError {
@@ -405,6 +475,68 @@ namespace Frida.Fruity {
 			get;
 			set;
 			default = AUTO;
+		}
+	}
+
+	public class ProcessInfo : Object {
+		public uint pid {
+			get;
+			set;
+		}
+
+		public uint parent_pid {
+			get;
+			set;
+		}
+
+		public uint real_uid {
+			get;
+			set;
+		}
+
+		public uint real_gid {
+			get;
+			set;
+		}
+
+		public uint effective_uid {
+			get;
+			set;
+		}
+
+		public uint effective_gid {
+			get;
+			set;
+		}
+
+		public uint cpu_type {
+			get;
+			set;
+		}
+
+		public uint cpu_subtype {
+			get;
+			set;
+		}
+
+		public uint pointer_size {
+			get;
+			set;
+		}
+
+		public string os_type {
+			get;
+			set;
+		}
+
+		public string vendor {
+			get;
+			set;
+		}
+
+		public ByteOrder byte_order {
+			get;
+			set;
 		}
 	}
 
