@@ -424,6 +424,13 @@ namespace Frida.Fruity {
 				return dictionary;
 			}
 
+			public string get_string (string name) throws LLDBError {
+				var val = properties[name];
+				if (val == null)
+					throw new LLDBError.PROTOCOL ("Property '%s' not found", name);
+				return val;
+			}
+
 			public uint get_uint (string name) throws LLDBError {
 				var raw_val = get_string (name);
 
@@ -435,13 +442,6 @@ namespace Frida.Fruity {
 				}
 
 				return (uint) val;
-			}
-
-			public string get_string (string name) throws LLDBError {
-				var val = properties[name];
-				if (val == null)
-					throw new LLDBError.PROTOCOL ("Property '%s' not found", name);
-				return val;
 			}
 		}
 	}
