@@ -74,6 +74,8 @@ namespace Frida {
 			construct;
 		}
 
+		private Gee.HashMap<uint, SpawnEntry> spawn_entries = new Gee.HashMap<uint, SpawnEntry> ();
+
 		public FruityLockdownSession (Fruity.LockdownClient lockdown) {
 			Object (lockdown: lockdown);
 		}
@@ -174,7 +176,13 @@ namespace Frida {
 
 				var process = yield lldb.launch (argv, launch_options);
 
-				return process.pid;
+				var pid = process.pid;
+
+				var entry = new SpawnEntry (lldb, process);
+				entry.closed.connect (on_spawn_entry_closed);
+				spawn_entries[pid] = entry;
+
+				return pid;
 			} catch (Fruity.InstallationProxyError e) {
 				throw new Error.NOT_SUPPORTED ("%s", e.message);
 			} catch (Fruity.LLDBError e) {
@@ -187,7 +195,11 @@ namespace Frida {
 		}
 
 		public async void resume (uint pid) throws Error {
-			throw new Error.NOT_SUPPORTED ("Not yet implemented");
+			var entry = spawn_entries[pid];
+			if (entry == null)
+				throw new Error.INVALID_ARGUMENT ("Invalid PID");
+
+			yield entry.resume ();
 		}
 
 		public async void kill (uint pid) throws Error {
@@ -204,6 +216,51 @@ namespace Frida {
 
 		public async InjectorPayloadId inject_library_blob (uint pid, uint8[] blob, string entrypoint, string data) throws Error {
 			throw new Error.NOT_SUPPORTED ("Not yet implemented");
+		}
+
+		private void on_spawn_entry_closed (SpawnEntry entry) {
+			spawn_entries.unset (entry.process.pid);
+		}
+
+		private class SpawnEntry : Object {
+			public signal void closed ();
+
+			public Fruity.LLDBClient lldb {
+				get;
+				construct;
+			}
+
+			public Fruity.ProcessInfo process {
+				get;
+				construct;
+			}
+
+			public SpawnEntry (Fruity.LLDBClient lldb, Fruity.ProcessInfo process) {
+				Object (
+					lldb: lldb,
+					process: process
+				);
+			}
+
+			construct {
+				lldb.closed.connect (on_lldb_closed);
+			}
+
+			~SpawnEntry () {
+				lldb.closed.disconnect (on_lldb_closed);
+			}
+
+			public async void resume () throws Error {
+				try {
+					yield lldb.continue ();
+				} catch (Fruity.LLDBError e) {
+					throw new Error.NOT_SUPPORTED ("%s", e.message);
+				}
+			}
+
+			private void on_lldb_closed () {
+				closed ();
+			}
 		}
 	}
 }

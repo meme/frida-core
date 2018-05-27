@@ -53,8 +53,8 @@ namespace Frida.HostSessionTest {
 			h.run ();
 		});
 
-		GLib.Test.add_func ("/HostSession/Fruity/Manual/enumerate-applications", () => {
-			var h = new Harness ((h) => Fruity.Manual.enumerate_applications.begin (h as Harness));
+		GLib.Test.add_func ("/HostSession/Fruity/Manual/lockdown", () => {
+			var h = new Harness ((h) => Fruity.Manual.lockdown.begin (h as Harness));
 			h.run ();
 		});
 
@@ -1566,22 +1566,7 @@ Interceptor.attach(Module.findExportByName('UIKit', 'UIApplicationMain'), functi
 					printerr ("ERROR: %s\n", e.message);
 				}
 
-				var done = false;
-
-				new Thread<bool> ("input-worker", () => {
-					print ("Hit a key to exit\n");
-					stdin.getc ();
-
-					Idle.add (() => {
-						done = true;
-						return false;
-					});
-
-					return true;
-				});
-
-				while (!done)
-					yield h.process_events ();
+				yield h.prompt_for_key ("Hit a key to exit: ");
 
 				yield device_manager.close ();
 
@@ -2590,7 +2575,13 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 
 		namespace Manual {
 
-			private static async void enumerate_applications (Harness h) {
+			private static async void lockdown (Harness h) {
+				if (!GLib.Test.slow ()) {
+					stdout.printf ("<skipping, run in slow mode with iOS device connected> ");
+					h.done ();
+					return;
+				}
+
 				var device_id = "5cb26a937ef2d389419ecbe2ec21eec08338e060";
 
 				var device_manager = new DeviceManager ();
@@ -2598,16 +2589,31 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 				try {
 					var device = yield device_manager.get_device_by_id (device_id + ":lockdown");
 
+					var timer = new Timer ();
+
+					printerr ("enumerate_applications()");
+					timer.reset ();
 					var apps = yield device.enumerate_applications ();
-					printerr ("got %d apps\n", apps.size ());
-					var length = apps.size ();
-					for (int i = 0; i != length; i++) {
-						var app = apps.get (i);
-						printerr ("\t%s\n", app.identifier);
+					printerr (" => got %d apps, took %u ms\n", apps.size (), (uint) (timer.elapsed () * 1000.0));
+					if (GLib.Test.verbose ()) {
+						var length = apps.size ();
+						for (int i = 0; i != length; i++) {
+							var app = apps.get (i);
+							printerr ("\t%s\n", app.identifier);
+						}
 					}
 
+					printerr ("spawn()");
+					timer.reset ();
 					var pid = yield device.spawn ("no.oleavr.FridaBeachHead");
-					printerr ("spawn() => PID=%u\n", pid);
+					printerr (" => pid=%u, took %u ms\n", pid, (uint) (timer.elapsed () * 1000.0));
+
+					printerr ("resume(pid=%u)", pid);
+					timer.reset ();
+					yield device.resume (pid);
+					printerr (" => took %u ms\n", (uint) (timer.elapsed () * 1000.0));
+
+					yield h.prompt_for_key ("Hit a key to exit: ");
 				} catch (GLib.Error e) {
 					printerr ("\nFAIL: %s\n\n", e.message);
 				}
@@ -2852,6 +2858,31 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 		public HostSessionProvider first_provider () {
 			assert (available_providers.size >= 1);
 			return available_providers[0];
+		}
+
+		public async char prompt_for_key (string message) {
+			char key = 0;
+
+			var done = false;
+
+			new Thread<bool> ("input-worker", () => {
+				stdout.printf ("%s", message);
+				stdout.flush ();
+
+				key = (char) stdin.getc ();
+
+				Idle.add (() => {
+					done = true;
+					return false;
+				});
+
+				return true;
+			});
+
+			while (!done)
+				yield process_events ();
+
+			return key;
 		}
 	}
 }

@@ -1,5 +1,7 @@
 namespace Frida.Fruity {
 	public class LLDBClient : Object, AsyncInitable {
+		public signal void closed ();
+
 		public LockdownClient lockdown {
 			get;
 			construct;
@@ -100,6 +102,8 @@ namespace Frida.Fruity {
 				yield stream.close_async ();
 			} catch (IOError e) {
 			}
+
+			closed ();
 		}
 
 		public async ProcessInfo launch (string[] argv, LaunchOptions? options = null) throws LLDBError {
@@ -137,6 +141,13 @@ namespace Frida.Fruity {
 			return yield get_process_info ();
 		}
 
+		public async void continue () throws LLDBError {
+			check_stopped ();
+
+			state = RUNNING;
+			write_packet ("c");
+		}
+
 		private async ProcessInfo get_process_info () throws LLDBError {
 			var response = yield request ("qProcessInfo");
 
@@ -157,6 +168,11 @@ namespace Frida.Fruity {
 			info.byte_order = (raw_info.get_string ("endian") == "little") ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN;
 
 			return info;
+		}
+
+		private void check_stopped () throws LLDBError {
+			if (state != STOPPED)
+				throw new LLDBError.FAILED ("Invalid operation when not STOPPED, current state is %s", state.to_string ());
 		}
 
 		private async Packet request (string payload) throws LLDBError {
@@ -181,6 +197,9 @@ namespace Frida.Fruity {
 					foreach (var pending_response in pending_responses)
 						pending_response.complete_with_error (error);
 					pending_responses.clear ();
+
+					yield close ();
+
 					return;
 				}
 			}
