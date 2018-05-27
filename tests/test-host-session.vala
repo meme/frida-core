@@ -2585,11 +2585,28 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 				h.disable_timeout ();
 
 				var device_id = "5cb26a937ef2d389419ecbe2ec21eec08338e060";
+				var app_id = "no.oleavr.FridaBeachHead";
 
 				var device_manager = new DeviceManager ();
 
 				try {
 					var device = yield device_manager.get_device_by_id (device_id + ":lockdown");
+
+					device.output.connect ((pid, fd, data) => {
+						var chars = data.get_data ();
+						var len = chars.length;
+						if (len == 0) {
+							printerr ("[pid=%u fd=%d EOF]\n", pid, fd);
+							return;
+						}
+
+						var buf = new uint8[len + 1];
+						Memory.copy (buf, chars, len);
+						buf[len] = '\0';
+						string message = (string) buf;
+
+						printerr ("[pid=%u fd=%d OUTPUT] %s", pid, fd, message);
+					});
 
 					var timer = new Timer ();
 
@@ -2607,7 +2624,7 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 
 					printerr ("spawn()");
 					timer.reset ();
-					var pid = yield device.spawn ("no.oleavr.FridaBeachHead");
+					var pid = yield device.spawn (app_id);
 					printerr (" => pid=%u, took %u ms\n", pid, (uint) (timer.elapsed () * 1000.0));
 
 					printerr ("resume(pid=%u)", pid);

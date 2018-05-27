@@ -180,6 +180,7 @@ namespace Frida {
 
 				var entry = new SpawnEntry (lldb, process);
 				entry.closed.connect (on_spawn_entry_closed);
+				entry.output.connect (on_spawn_entry_output);
 				spawn_entries[pid] = entry;
 
 				return pid;
@@ -220,10 +221,18 @@ namespace Frida {
 
 		private void on_spawn_entry_closed (SpawnEntry entry) {
 			spawn_entries.unset (entry.process.pid);
+
+			entry.closed.disconnect (on_spawn_entry_closed);
+			entry.output.disconnect (on_spawn_entry_output);
+		}
+
+		private void on_spawn_entry_output (SpawnEntry entry, Bytes bytes) {
+			output (entry.process.pid, 1, bytes.get_data ());
 		}
 
 		private class SpawnEntry : Object {
 			public signal void closed ();
+			public signal void output (Bytes bytes);
 
 			public Fruity.LLDBClient lldb {
 				get;
@@ -244,10 +253,12 @@ namespace Frida {
 
 			construct {
 				lldb.closed.connect (on_lldb_closed);
+				lldb.console_output.connect (on_lldb_console_output);
 			}
 
 			~SpawnEntry () {
 				lldb.closed.disconnect (on_lldb_closed);
+				lldb.console_output.disconnect (on_lldb_console_output);
 			}
 
 			public async void resume () throws Error {
@@ -260,6 +271,10 @@ namespace Frida {
 
 			private void on_lldb_closed () {
 				closed ();
+			}
+
+			private void on_lldb_console_output (Bytes bytes) {
+				output (bytes);
 			}
 		}
 	}

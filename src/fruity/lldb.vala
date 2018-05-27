@@ -1,6 +1,7 @@
 namespace Frida.Fruity {
 	public class LLDBClient : Object, AsyncInitable {
 		public signal void closed ();
+		public signal void console_output (Bytes bytes);
 
 		public LockdownClient lockdown {
 			get;
@@ -32,6 +33,8 @@ namespace Frida.Fruity {
 			PROPER,
 			ZEROED
 		}
+
+		private const char NOTIFICATION_TYPE_OUTPUT = 'O';
 
 		private const string ACK_NOTIFICATION = "+";
 		private const string NACK_NOTIFICATION = "-";
@@ -261,6 +264,18 @@ namespace Frida.Fruity {
 		}
 
 		private void handle_notification (Packet packet) throws LLDBError {
+			var payload = packet.payload;
+			unowned string data = (string) ((char *) payload + 1);
+			switch (payload[0]) {
+				case NOTIFICATION_TYPE_OUTPUT:
+					handle_output (data);
+					break;
+			}
+		}
+
+		private void handle_output (string hex_bytes) throws LLDBError {
+			var bytes = parse_hex_bytes (hex_bytes);
+			console_output (bytes);
 		}
 
 		private async Packet read_packet () throws LLDBError {
@@ -386,6 +401,35 @@ namespace Frida.Fruity {
 				sum += (uint8) data[i];
 
 			return sum;
+		}
+
+		private const int8[] hex_char_to_nibble = {
+			-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+			-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+			0, 1, 2, 3, 4, 5, 6, 7, 8, 9, -1, -1, -1, -1, -1, -1, -1, 10, 11, 12, 13, 14, 15, -1, -1, -1,
+			-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+			10, 11, 12, 13, 14, 15, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+			-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+			-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+			-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+			-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+			-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+			-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
+		};
+
+		private static Bytes parse_hex_bytes (string hex_bytes) throws LLDBError {
+			int size = hex_bytes.length / 2;
+			uint8[] data = new uint8[size];
+
+			for (int byte_offset = 0, hex_offset = 0; byte_offset != size; byte_offset++, hex_offset += 2) {
+				int8 upper = hex_char_to_nibble[hex_bytes[hex_offset + 0]];
+				int8 lower = hex_char_to_nibble[hex_bytes[hex_offset + 1]];
+				if (upper == -1 || lower == -1)
+					throw new LLDBError.PROTOCOL ("Invalid hex byte");
+				data[byte_offset] = (upper << 4) | lower;
+			}
+
+			return new Bytes.take ((owned) data);
 		}
 
 		private class Packet {
