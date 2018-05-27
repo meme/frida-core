@@ -2582,6 +2582,8 @@ Interceptor.attach(Module.findExportByName('kernel32.dll', 'OutputDebugStringW')
 					return;
 				}
 
+				h.disable_timeout ();
+
 				var device_id = "5cb26a937ef2d389419ecbe2ec21eec08338e060";
 
 				var device_manager = new DeviceManager ();
