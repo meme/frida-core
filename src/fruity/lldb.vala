@@ -71,12 +71,12 @@ namespace Frida.Fruity {
 				process_incoming_packets.begin ();
 				write_string (ACK_NOTIFICATION);
 
-				yield request ("QStartNoAckMode");
+				yield execute ("QStartNoAckMode");
 				ack_mode = SKIP_ACKS;
 
-				yield request ("QThreadSuffixSupported");
-				yield request ("QListThreadsInStopReply");
-				yield request ("QSetDetachOnError:0");
+				yield execute ("QThreadSuffixSupported");
+				yield execute ("QListThreadsInStopReply");
+				yield execute ("QSetDetachOnError:0");
 			} catch (LockdownError e) {
 				if (e is LockdownError.INVALID_SERVICE)
 					throw new LLDBError.DDI_NOT_MOUNTED ("Developer Disk Image not mounted");
@@ -109,14 +109,14 @@ namespace Frida.Fruity {
 		public async ProcessInfo launch (string[] argv, LaunchOptions? options = null) throws LLDBError {
 			if (options != null) {
 				foreach (var env in options.env)
-					yield request ("QEnvironment:" + env);
+					yield execute ("QEnvironment:" + env);
 
 				var arch = options.arch;
 				if (arch != null)
-					yield request ("QLaunchArch:" + arch);
+					yield execute ("QLaunchArch:" + arch);
 
 				if (options.aslr == DISABLE)
-					yield request ("QSetDisableASLR:1");
+					yield execute ("QSetDisableASLR:1");
 			}
 
 			var set_args_request = new StringBuilder ("A");
@@ -134,9 +134,16 @@ namespace Frida.Fruity {
 
 				arg_index++;
 			}
-			yield request (set_args_request.str);
+			yield execute (set_args_request.str);
 
-			yield request ("qLaunchSuccess");
+			try {
+				yield execute ("qLaunchSuccess");
+			} catch (LLDBError e) {
+				if (e is LLDBError.FAILED && e.message == "Locked")
+					throw new LLDBError.DEVICE_LOCKED ("Device is locked");
+				else
+					throw e;
+			}
 
 			return yield get_process_info ();
 		}
@@ -149,7 +156,7 @@ namespace Frida.Fruity {
 		}
 
 		private async ProcessInfo get_process_info () throws LLDBError {
-			var response = yield request ("qProcessInfo");
+			var response = yield query ("qProcessInfo");
 
 			var raw_info = PropertyDictionary.parse (response.payload);
 
@@ -175,8 +182,19 @@ namespace Frida.Fruity {
 				throw new LLDBError.FAILED ("Invalid operation when not STOPPED, current state is %s", state.to_string ());
 		}
 
-		private async Packet request (string payload) throws LLDBError {
-			var pending = new PendingResponse (() => request.callback ());
+		private async void execute (string payload) throws LLDBError {
+			var response_packet = yield query (payload);
+
+			var response = response_packet.payload;
+			if (response[0] == 'E')
+				throw new LLDBError.FAILED ("%s", response[1:response.length]);
+
+			if (response != "OK")
+				throw new LLDBError.PROTOCOL ("Unexpected response: %s", response);
+		}
+
+		private async Packet query (string payload) throws LLDBError {
+			var pending = new PendingResponse (() => query.callback ());
 			pending_responses.offer_tail (pending);
 			write_packet (payload);
 			yield;
@@ -239,12 +257,7 @@ namespace Frida.Fruity {
 			if (pending == null)
 				throw new LLDBError.PROTOCOL ("Unexpected response");
 
-			var payload = response.payload;
-			if (payload.length == 3 && payload[0] == 'E') {
-				pending.complete_with_error (new LLDBError.FAILED ("Request failed: %s", payload[1:3]));
-			} else {
-				pending.complete_with_response (response);
-			}
+			pending.complete_with_response (response);
 		}
 
 		private void handle_notification (Packet packet) throws LLDBError {
@@ -469,6 +482,7 @@ namespace Frida.Fruity {
 		FAILED,
 		CONNECTION_CLOSED,
 		DDI_NOT_MOUNTED,
+		DEVICE_LOCKED,
 		PROTOCOL
 	}
 
