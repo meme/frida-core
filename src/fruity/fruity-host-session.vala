@@ -1,5 +1,7 @@
 namespace Frida {
 	public class FruityHostSessionBackend : Object, HostSessionBackend {
+		private const bool LOCKDOWN_INTEGRATION_ENABLED = false;
+
 		private Fruity.UsbmuxClient control_client;
 
 		private Gee.HashSet<uint> devices = new Gee.HashSet<uint> ();
@@ -130,11 +132,15 @@ namespace Frida {
 			var remote_provider = new FruityRemoteProvider (name, icon, details);
 			remote_providers[raw_id] = remote_provider;
 
-			var lockdown_provider = new FruityLockdownProvider (name, icon, details);
-			lockdown_providers[raw_id] = lockdown_provider;
+			FruityLockdownProvider lockdown_provider = null;
+			if (LOCKDOWN_INTEGRATION_ENABLED) {
+				lockdown_provider = new FruityLockdownProvider (name, icon, details);
+				lockdown_providers[raw_id] = lockdown_provider;
+			}
 
 			provider_available (remote_provider);
-			provider_available (lockdown_provider);
+			if (lockdown_provider != null)
+				provider_available (lockdown_provider);
 		}
 
 		private void remove_device (Fruity.DeviceId id) {
