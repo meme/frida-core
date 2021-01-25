@@ -320,9 +320,10 @@ namespace Frida.Agent {
 #if !WINDOWS
 			GumJS.prepare_to_fork ();
 			Gum.prepare_to_fork ();
+#if GLIB_DYNAMIC_UNLOADING
 			GIOFork.prepare_to_fork ();
 			GLibFork.prepare_to_fork ();
-
+#endif
 #endif
 
 			fdt_padder = null;
@@ -363,15 +364,19 @@ namespace Frida.Agent {
 
 			if (actor == PARENT) {
 #if !WINDOWS
+#if GLIB_DYNAMIC_UNLOADING
 				GLibFork.recover_from_fork_in_parent ();
 				GIOFork.recover_from_fork_in_parent ();
+#endif
 				Gum.recover_from_fork_in_parent ();
 				GumJS.recover_from_fork_in_parent ();
 #endif
 			} else if (actor == CHILD) {
 #if !WINDOWS
+#if GLIB_DYNAMIC_UNLOADING
 				GLibFork.recover_from_fork_in_child ();
 				GIOFork.recover_from_fork_in_child ();
+#endif
 				Gum.recover_from_fork_in_child ();
 				GumJS.recover_from_fork_in_child ();
 #endif

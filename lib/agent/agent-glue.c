@@ -21,7 +21,9 @@ _frida_agent_environment_init (void)
 {
   gum_init_embedded ();
 
+#ifdef HAVE_FRIDA_GLIB
   g_thread_set_garbage_handler (_frida_agent_on_pending_thread_garbage, NULL);
+#endif
 
 #ifdef HAVE_GIOSCHANNEL
   g_io_module_schannel_register ();

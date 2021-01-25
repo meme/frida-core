@@ -41,7 +41,9 @@ void CFLog (CFLogLevel level, CFStringRef format, ...);
 # include <stdio.h>
 #endif
 
+#ifdef HAVE_FRIDA_GLIB
 static void frida_server_on_assert_failure (const gchar * log_domain, const gchar * file, gint line, const gchar * func, const gchar * message, gpointer user_data) G_GNUC_NORETURN;
+#endif
 static void frida_server_on_log_message (const gchar * log_domain, GLogLevelFlags log_level, const gchar * message, gpointer user_data);
 
 static gboolean frida_verbose_logging_enabled = FALSE;
@@ -51,7 +53,9 @@ frida_server_environment_init (void)
 {
   frida_init_with_runtime (FRIDA_RUNTIME_GLIB);
 
+#ifdef HAVE_FRIDA_GLIB
   g_assertion_set_handler (frida_server_on_assert_failure, NULL);
+#endif
   g_log_set_default_handler (frida_server_on_log_message, NULL);
 }
 
@@ -79,6 +83,7 @@ frida_server_tcp_enable_nodelay (GSocket * socket)
   g_socket_set_option (socket, IPPROTO_TCP, TCP_NODELAY, TRUE, NULL);
 }
 
+#ifdef HAVE_FRIDA_GLIB
 static void
 frida_server_on_assert_failure (const gchar * log_domain, const gchar * file, gint line, const gchar * func, const gchar * message, gpointer user_data)
 {
@@ -95,6 +100,7 @@ frida_server_on_assert_failure (const gchar * log_domain, const gchar * file, gi
 
   abort ();
 }
+#endif
 
 static void
 frida_server_on_log_message (const gchar * log_domain, GLogLevelFlags log_level, const gchar * message, gpointer user_data)
